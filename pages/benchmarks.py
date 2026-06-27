@@ -17,6 +17,7 @@ _PIPELINE_KEYS = [
     "raw_data", "cohort", "feature_config", "treatment_config",
     "model_config", "model_results", "calib_results", "upload_df",
     "upload_target", "upload_features", "upload_dict", "X_res",
+    "benchmark_name", "benchmark_icon", "benchmark_source", "benchmark_description",
 ]
 
 
@@ -37,6 +38,10 @@ def _go_benchmark(bench_key: str):
     ss.upload_features = [c for c in df.columns if c != bench.target_col]
     ss.upload_dict = bench.dict_meta or {}
     ss.raw_data = {}
+    ss.benchmark_name = bench.name
+    ss.benchmark_icon = bench.icon
+    ss.benchmark_source = bench.source
+    ss.benchmark_description = bench.note
     st.switch_page("pages/analise.py")
 
 

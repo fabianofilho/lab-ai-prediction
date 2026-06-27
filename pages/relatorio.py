@@ -21,7 +21,7 @@ def _ev():
 
 _favicon = _PILImage.open(Path(__file__).parent.parent / "favicon.png")
 st.set_page_config(
-    page_title="Relatório — DataSUS AI",
+    page_title="Relatório — Lab AI",
     page_icon=_favicon,
     layout="wide",
     initial_sidebar_state="expanded",
@@ -218,7 +218,7 @@ def render_topbar() -> None:
         '<div class="ds-topbar">'
         '<a class="ds-topbar-logo" href="/" target="_self">'
         '<span class="ms" style="font-size:1.2rem;color:#111827">local_hospital</span>'
-        'DataSUS AI'
+        'Lab AI'
         '<span class="ds-topbar-badge">PREDICTION</span>'
         '</a>'
         '<a class="ds-topbar-right" href="/" target="_self">'
@@ -368,7 +368,7 @@ def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict) 
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório DataSUS AI — {outcome.name}</title>
+<title>Relatório Lab AI — {outcome.name}</title>
 <style>
   body{{font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;max-width:960px;margin:40px auto;color:#111827;padding:0 24px}}
   h1{{font-size:1.4rem;margin-bottom:4px}}

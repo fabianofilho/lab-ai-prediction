@@ -41,7 +41,7 @@ def _px():
 
 _favicon = _PILImage.open(Path(__file__).parent.parent / "favicon.png")
 st.set_page_config(
-    page_title="DataSUS AI — Calibração",
+    page_title="Lab AI — Calibração",
     page_icon=_favicon,
     layout="wide",
     initial_sidebar_state="expanded",
@@ -250,7 +250,7 @@ def render_topbar() -> None:
         '<div class="ds-topbar">'
         '<a class="ds-topbar-logo" href="/" target="_self">'
         '<span class="ms" style="font-size:1.2rem;color:#111827">local_hospital</span>'
-        'DataSUS AI'
+        'Lab AI'
         '<span class="ds-topbar-badge">PREDICTION</span>'
         '</a>'
         '<a class="ds-topbar-right" href="/" target="_self">'

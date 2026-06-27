@@ -37,6 +37,19 @@ class _DiyOutcome(OutcomeConfig):
         return cohort[t].astype(int)
 
 
+def _make_diy_outcome(**overrides) -> _DiyOutcome:
+    """Cria _DiyOutcome lendo nome/ícone/fonte de benchmark do session_state quando existir."""
+    name = st.session_state.get("benchmark_name") or "Do It Yourself (DIY)"
+    icon = st.session_state.get("benchmark_icon") or "construction"
+    source = st.session_state.get("benchmark_source") or "UPLOAD"
+    description = st.session_state.get("benchmark_description") or "Base personalizada carregada pelo usuário."
+    return _DiyOutcome(
+        name=name, icon=icon, description=description,
+        data_sources=[source],
+        **overrides,
+    )
+
+
 # ── Lazy loaders ──────────────────────────────────────────────────────────────
 
 @st.cache_resource(show_spinner=False)
@@ -445,7 +458,7 @@ def current_step() -> int:
 def render_topbar() -> None:
     _ok = ss.get("outcome_key")
     if _ok:
-        _o = _DiyOutcome() if _ok == "__diy__" else OUTCOMES[_ok]
+        _o = _make_diy_outcome() if _ok == "__diy__" else OUTCOMES[_ok]
         _right = (
             f'<span style="display:flex;align-items:center;gap:6px;">'
             f'<span style="font-size:0.72rem;color:#9ca3af;">Módulo:</span>'
@@ -463,7 +476,7 @@ def render_topbar() -> None:
         '<div class="ds-topbar">'
         '<a class="ds-topbar-logo" href="/" target="_self">'
         '<span class="ms" style="font-size:1.2rem;color:#111827">local_hospital</span>'
-        'DataSUS AI'
+        'Lab AI'
         '<span class="ds-topbar-badge">PREDICTION</span>'
         '</a>'
         + _right +
@@ -553,7 +566,7 @@ def render_sidebar() -> None:
         # Step 1: Desfecho
         if ss.get("outcome_key"):
             _ok2 = ss["outcome_key"]
-            o = _DiyOutcome() if _ok2 == "__diy__" else OUTCOMES[_ok2]
+            o = _make_diy_outcome() if _ok2 == "__diy__" else OUTCOMES[_ok2]
             src_txt = ", ".join(o.data_sources)
             st.markdown(
                 f'<div class="sb-step">'
@@ -701,7 +714,7 @@ render_step_bar(current_step())
 
 
 _is_diy = ss["outcome_key"] == "__diy__"
-outcome = _DiyOutcome(
+outcome = _make_diy_outcome(
     target_col=ss.get("upload_target") or "target",
     suggested_features=ss.get("upload_features") or [],
 ) if _is_diy else OUTCOMES[ss["outcome_key"]]

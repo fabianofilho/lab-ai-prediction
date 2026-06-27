@@ -78,6 +78,7 @@ _PIPELINE_KEYS = [
     "raw_data", "cohort", "feature_config", "treatment_config",
     "model_config", "model_results", "calib_results", "upload_df",
     "upload_target", "upload_features", "upload_dict", "X_res",
+    "benchmark_name", "benchmark_icon", "benchmark_source", "benchmark_description",
 ]
 
 

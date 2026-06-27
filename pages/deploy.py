@@ -203,7 +203,7 @@ def render_topbar() -> None:
         '<div class="ds-topbar">'
         '<a class="ds-topbar-logo" href="/" target="_self">'
         '<span class="ms" style="font-size:1.2rem;color:#111827">local_hospital</span>'
-        'DataSUS AI'
+        'Lab AI'
         '<span class="ds-topbar-badge">PREDICTION</span>'
         '</a>'
         '<a class="ds-topbar-right" href="/" target="_self">'
