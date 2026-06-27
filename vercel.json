@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://lab-ai-prediction.streamlit.app",
+      "permanent": false
+    }
+  ]
+}

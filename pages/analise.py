@@ -1,0 +1,3463 @@
+"""Lab AI Prediction — wizard completo (carregado sob demanda)."""
+from __future__ import annotations
+from dataclasses import dataclass, field
+from pathlib import Path
+from PIL import Image as _PILImage
+
+import streamlit as st
+
+from core.outcomes import OUTCOME_GROUPS, OUTCOMES
+from core.outcomes.base import OutcomeConfig
+
+
+# ── DIY pseudo-outcome (used when outcome_key == "__diy__") ───────────────────
+@dataclass
+class _DiyOutcome(OutcomeConfig):
+    """Minimal outcome wrapper for user-uploaded custom datasets."""
+    key: str = "__diy__"
+    name: str = "Do It Yourself (DIY)"
+    description: str = "Base personalizada carregada pelo usuário."
+    data_sources: list[str] = field(default_factory=lambda: ["UPLOAD"])
+    observation_window_days: int = 0
+    prediction_window_days: int = 0
+    requires_linkage: bool = False
+    suggested_features: list[str] = field(default_factory=list)
+    target_col: str = "target"
+    icon: str = "construction"
+
+    def build_cohort(self, data: dict) -> "pd.DataFrame":
+        return list(data.values())[0]
+
+    def build_features(self, cohort: "pd.DataFrame") -> "pd.DataFrame":
+        return cohort
+
+    def get_target(self, cohort: "pd.DataFrame") -> "pd.Series":
+        import streamlit as _st
+        t = _st.session_state.get("upload_target") or self.target_col
+        return cohort[t].astype(int)
+
+
+# ── Lazy loaders ──────────────────────────────────────────────────────────────
+
+@st.cache_resource(show_spinner=False)
+def _dl():
+    from core.data.downloader import STATES, ManualUploadRequired, fetch, load_from_csv
+    return STATES, ManualUploadRequired, fetch, load_from_csv
+
+@st.cache_resource(show_spinner=False)
+def _cohort():
+    from core.features.cohort import CohortBuilder
+    return CohortBuilder
+
+@st.cache_resource(show_spinner=False)
+def _pipeline():
+    from core.models.pipeline import (
+        ALGORITHMS, train_cv, optimize_hyperparams, calibrate_model,
+        build_pipeline, random_search, grid_search,
+    )
+    return ALGORITHMS, train_cv, optimize_hyperparams, calibrate_model, build_pipeline, random_search, grid_search
+
+@st.cache_resource(show_spinner=False)
+def _ev():
+    from core.models import evaluation
+    return evaluation
+
+@st.cache_resource(show_spinner=False)
+def _px():
+    import plotly.express as px
+    return px
+
+@st.cache_resource(show_spinner=False)
+def _pd():
+    import pandas as pd
+    return pd
+
+_favicon = _PILImage.open(Path(__file__).parent.parent / "favicon.png")
+st.set_page_config(
+    page_title="Lab AI Prediction",
+    page_icon=_favicon,
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown("""
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,300,0,0" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
+
+<style>
+/* ── Tokens — paleta preto/branco ────────────────────────────── */
+:root {
+  --primary:        #223886;
+  --primary-hover:  #1a2b66;
+  --primary-light:  #eef1fb;
+  --primary-ring:   rgba(34,56,134,.15);
+  --accent:         #9ec83b;
+  --bg:             #ffffff;
+  --bg-page:        #ffffff;
+  --fg:             #0f1730;
+  --muted:          #4b5563;
+  --border:         #e5e7eb;
+  --done-bg:        #f9fafb;
+  --done-border:    #e5e7eb;
+  --done-fg:        #374151;
+  --radius:         6px;
+  --topbar-h:       52px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.08);
+}
+h1,h2,h3,h4,h5,h6 { font-family:"Space Grotesk","Inter",sans-serif !important; letter-spacing:-.01em; }
+[data-testid="collapsedControl"],[data-testid="stSidebarCollapseButton"]{background:var(--primary)!important;border-right:1px solid var(--primary)!important;}
+[data-testid="collapsedControl"] svg,[data-testid="stSidebarCollapseButton"] svg{color:#fff!important;fill:#fff!important;}
+
+/* Material Symbols */
+.ms {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal; font-weight: normal;
+  font-size: 1rem; line-height: 1;
+  vertical-align: middle; display: inline-block;
+  color: var(--fg);
+}
+
+/* ── Oculta elementos nativos do Streamlit ──────────────────── */
+header, footer,
+[data-testid="stSidebarNav"], [data-testid="stHeader"],
+[data-testid="stToolbar"], [data-testid="stDecoration"],
+#MainMenu { display: none !important; }
+
+/* ── Base ───────────────────────────────────────────────────── */
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+  background: var(--bg) !important;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  color: var(--fg) !important;
+}
+
+/* ── Container ──────────────────────────────────────────────── */
+.block-container {
+  padding-top:    calc(var(--topbar-h) + 32px) !important;
+  padding-bottom: 56px !important;
+  padding-left:   32px !important;
+  padding-right:  40px !important;
+  max-width:      1100px !important;
+}
+
+/* ── Sidebar: botões de colapso sempre ocultos ───────────────── */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"] {
+  display: none !important;
+}
+
+/* ── Sidebar: abaixo da topbar ───────────────────────────────── */
+[data-testid="stSidebar"] {
+  top: var(--topbar-h) !important;
+  height: calc(100vh - var(--topbar-h)) !important;
+  background: var(--bg) !important;
+  border-right: 1px solid var(--border) !important;
+  overflow: hidden !important;
+}
+/* Remove padding padrão do Streamlit no topo da sidebar */
+[data-testid="stSidebar"] > div:first-child {
+  padding: 0 0.75rem 0.5rem !important;
+  height: 100% !important;
+  overflow-y: auto !important;   /* rola quando os passos passam da altura */
+  overflow-x: hidden !important;
+  scrollbar-width: thin;
+}
+[data-testid="stSidebar"] > div:first-child > div:first-child,
+[data-testid="stSidebarUserContent"] {
+  padding-top: 0.25rem !important;
+  margin-top: 0 !important;
+}
+/* Botões Editar mais compactos na sidebar */
+[data-testid="stSidebar"] [data-testid="stButton"] > button {
+  padding: 0.15rem 0.6rem !important;
+  font-size: 0.72rem !important;
+  min-height: 1.7rem !important;
+  height: 1.7rem !important;
+  margin-bottom: 2px !important;
+  margin-top: 1px !important;
+}
+.ds-sidebar-note {
+  background: var(--bg);
+  padding: 0.4rem 0 0.3rem;
+  font-size:.65rem; color:#6b7280; line-height:1.35;
+}
+.ds-sidebar-note-box {
+  background:#f9fafb; border:1px solid #e5e7eb;
+  border-radius:6px; padding:6px 8px;
+}
+
+/* ── Topbar ─────────────────────────────────────────────────── */
+.ds-topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  height: var(--topbar-h); background: var(--primary);
+  border-bottom: 3px solid var(--accent);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 48px 0 24px;
+}
+.ds-topbar, .ds-topbar a, .ds-topbar span, .ds-topbar div, .ds-topbar p { color: #ffffff !important; }
+.ds-topbar .ms { color: #ffffff !important; fill: #ffffff !important; }
+.ds-topbar .ds-topbar-badge { background: var(--accent) !important; color: var(--primary) !important; }
+.ds-topbar-logo {
+  display: flex; align-items: center; gap: 8px;
+  font-family: "Space Grotesk", "Inter", sans-serif !important; letter-spacing: .02em;
+  font-size: 0.93rem; font-weight: 700;
+  color: #ffffff !important; text-decoration: none !important;
+}
+.ds-topbar-logo:hover { color: #9ec83b !important; }
+.ds-topbar-badge {
+  background: var(--accent); color: var(--primary);
+  font-size: 0.62rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 4px;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.ds-topbar-right {
+  font-size: 0.78rem; color: #111827; font-weight: 500;
+  text-decoration: none !important;
+  display: flex; align-items: center; gap: 5px;
+}
+.ds-topbar-right:hover { opacity: 0.7; }
+
+/* ── Step bar ───────────────────────────────────────────────── */
+.ds-stepbar {
+  display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
+  overflow-x: auto; scrollbar-width: none;
+  margin-bottom: 28px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.ds-stepbar::-webkit-scrollbar { display: none; }
+.ds-step {
+  border-radius: 4px; padding: 2px 7px;
+  font-size: 0.7rem; font-weight: 500; white-space: nowrap; flex-shrink: 0;
+}
+.ds-step-done   { color: var(--muted); }
+.ds-step-active { background: var(--primary); color: #fff; font-weight: 600; }
+.ds-step-locked { color: #d1d5db; }
+.ds-step-optional { color: #d1d5db; }
+.ds-step-arrow  { color: #d1d5db; font-size: 0.75rem; padding: 0; flex-shrink: 0; }
+
+/* ── Done bar ───────────────────────────────────────────────── */
+.ds-done-bar {
+  background: var(--done-bg); border: 1px solid var(--done-border);
+  border-radius: var(--radius); padding: 9px 14px; margin-bottom: 4px;
+}
+.ds-done-label { font-size: 0.84rem; color: var(--done-fg); }
+
+/* ── Section title ──────────────────────────────────────────── */
+.ds-section-title {
+  font-size: 1rem; font-weight: 700; color: var(--fg); margin: 0 0 3px;
+}
+.ds-section-caption {
+  font-size: 0.8rem; color: var(--muted); margin: 0 0 16px;
+}
+
+/* ── Divisor ────────────────────────────────────────────────── */
+.ds-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+/* ── Métricas ───────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+  background: var(--bg) !important; border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important; padding: 14px 18px !important;
+  box-shadow: none !important;
+}
+[data-testid="stMetricLabel"] {
+  font-size: 0.73rem !important; color: var(--muted) !important; font-weight: 500 !important;
+}
+[data-testid="stMetricValue"] {
+  font-size: 1.4rem !important; font-weight: 700 !important; color: var(--fg) !important;
+}
+
+/* ── Botões ─────────────────────────────────────────────────── */
+.stButton { display: flex !important; justify-content: flex-start !important; }
+.stButton > button {
+  min-width: 0 !important;
+  padding: 5px 16px !important; border-radius: var(--radius) !important;
+  font-size: 0.82rem !important; font-weight: 500 !important;
+  transition: all .12s !important; cursor: pointer !important;
+  white-space: nowrap !important;
+}
+
+/* ── Pills de seção: altura fixa + texto centralizado ───────── */
+.ds-pill-row .stButton {
+  width: 100% !important; justify-content: stretch !important;
+}
+.ds-pill-row .stButton > button {
+  width: 100% !important; height: 38px !important;
+  text-align: center !important; justify-content: center !important;
+  padding: 6px 4px !important; display: flex !important; align-items: center !important;
+}
+.stButton > button[kind="primary"] {
+  background: var(--primary) !important; border: 1px solid var(--primary) !important;
+  color: #fff !important; font-weight: 600 !important; box-shadow: none !important;
+}
+.stButton > button[kind="primary"]:hover {
+  background: var(--primary-hover) !important; border-color: var(--primary-hover) !important;
+  color: #fff !important;
+}
+.stButton > button[kind="secondary"] {
+  background: #fff !important; border: 1px solid var(--border) !important;
+  color: var(--fg) !important; box-shadow: none !important;
+}
+.stButton > button[kind="secondary"]:hover {
+  border-color: var(--fg) !important; color: var(--fg) !important;
+  background: var(--primary-light) !important;
+}
+
+/* ── Inputs ─────────────────────────────────────────────────── */
+[data-baseweb="input"], [data-baseweb="select"] > div,
+[data-baseweb="base-input"] {
+  background: var(--bg) !important; border-color: var(--border) !important;
+  border-radius: var(--radius) !important; box-shadow: none !important;
+}
+[data-testid="stMultiSelect"] > div > div,
+[data-testid="stSelectbox"] > div > div {
+  background: var(--bg) !important; border-color: var(--border) !important;
+  border-radius: var(--radius) !important; box-shadow: none !important;
+}
+[data-baseweb="tag"] {
+  background: var(--primary) !important; border: none !important;
+  border-radius: 4px !important; padding: 0 8px !important;
+}
+[data-baseweb="tag"], [data-baseweb="tag"] * { color: #fff !important; font-size: 0.78rem !important; }
+[data-baseweb="tag"] svg { fill: #fff !important; color: #fff !important; }
+
+/* ── Labels ─────────────────────────────────────────────────── */
+[data-testid="stMultiSelect"] label,
+[data-testid="stSelectbox"] label,
+[data-testid="stSlider"] label,
+[data-testid="stCheckbox"] label,
+[data-testid="stFileUploader"] label {
+  color: var(--fg) !important; font-size: 0.82rem !important; font-weight: 500 !important;
+}
+
+/* ── Banners nativos do Streamlit ───────────────────────────── */
+[data-testid="stInfo"], [data-testid="stWarning"],
+[data-testid="stSuccess"] { border-radius: var(--radius) !important; }
+
+/* ── Caixas de informação/aviso — identidade cinza ──────────── */
+.ds-info-box {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 4px 0 12px;
+  font-size: 0.85rem;
+  color: #374151;
+  line-height: 1.5;
+}
+.ds-warn-box {
+  background: #f9fafb !important;
+  border: 1px solid #e5e7eb !important;
+  border-left: 3px solid #d1d5db !important;
+  border-radius: var(--radius) !important;
+  padding: 12px 16px !important;
+  margin: 4px 0 12px !important;
+  font-size: 0.85rem !important;
+  color: #374151 !important;
+  line-height: 1.5 !important;
+}
+.ds-warn-box * { color: #374151 !important; }
+
+/* ── Expander ───────────────────────────────────────────────── */
+[data-testid="stExpander"] {
+  background: var(--bg) !important; border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important; box-shadow: none !important;
+}
+
+/* ── Dataframe ──────────────────────────────────────────────── */
+[data-testid="stDataFrame"] { border-radius: var(--radius) !important; overflow: hidden; }
+
+/* ── Spinner ────────────────────────────────────────────────── */
+[data-testid="stSpinner"] > div { border-color: var(--fg) !important; }
+
+.ds-page { display: contents; }
+
+.sb-title {
+  font-size: .65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--muted); margin-bottom: 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.sb-step {
+  padding: 8px 10px; margin-bottom: 5px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--done-bg);
+}
+.sb-step-label {
+  font-size: .6rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); margin-bottom: 2px;
+}
+.sb-step-value {
+  font-size: .78rem; color: var(--fg); font-weight: 500; line-height: 1.35;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Session state ─────────────────────────────────────────────────────────────
+ss = st.session_state
+_defaults: dict = {
+    "outcome_key": None,
+    "raw_data": {},
+    "cohort": None,
+    "feature_config": None,
+    "treatment_config": None,
+    "model_config": None,
+    "model_results": None,
+    "calib_results": None,
+    "comparison_results": [],
+    "sel_states": ["SP"],
+    "sel_years": [2023],
+    "manual_needed": [],
+    "sample_n": 1_000,
+    "sample_seed": 42,
+    # Upload / DIY mode
+    "upload_df": None,
+    "upload_target": None,
+    "upload_features": [],
+    "upload_dict": {},
+}
+for k, v in _defaults.items():
+    if k not in ss:
+        ss[k] = v
+
+# ── Guard: reload sem sessão → volta para a home ──────────────────────────────
+if not ss.get("outcome_key"):
+    st.switch_page("app.py")
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def current_step() -> int:
+    if ss.get("comparison_results"):
+        return 8
+    if ss["model_results"]:
+        return 7
+    if ss.get("model_config"):
+        return 6
+    if ss.get("treatment_config"):
+        return 5
+    if ss.get("feature_config"):
+        return 4
+    if ss["cohort"] is not None:
+        return 3
+    if ss["raw_data"] or ss["outcome_key"]:
+        return 2
+    return 1
+
+
+def render_topbar() -> None:
+    _ok = ss.get("outcome_key")
+    if _ok:
+        _o = _DiyOutcome() if _ok == "__diy__" else OUTCOMES[_ok]
+        _right = (
+            f'<span style="display:flex;align-items:center;gap:6px;">'
+            f'<span style="font-size:0.72rem;color:#9ca3af;">Módulo:</span>'
+            f'<span class="ms" style="font-size:1rem;color:#111827">{_o.icon}</span>'
+            f'<span style="font-size:0.82rem;font-weight:600;color:#111827;">{_o.name}</span>'
+            f'</span>'
+        )
+    else:
+        _right = (
+            '<a class="ds-topbar-right" href="/" target="_self">'
+            '<span class="ms">analytics</span>Resultados do Modelo'
+            '</a>'
+        )
+    st.markdown(
+        '<div class="ds-topbar">'
+        '<a class="ds-topbar-logo" href="/" target="_self">'
+        '<span class="ms" style="font-size:1.2rem;color:#111827">local_hospital</span>'
+        'DataSUS AI'
+        '<span class="ds-topbar-badge">PREDICTION</span>'
+        '</a>'
+        + _right +
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_step_bar(step: int) -> None:
+    labels = ["Desfecho", "Dados", "Features", "Tratamento", "Modelo", "Treinamento", "Resultados", "Benchmark", "Deploy", "Relatório"]
+    optionals = {8, 9, 10}
+    parts = []
+    for i, lbl in enumerate(labels):
+        n = i + 1
+        optional = n in optionals
+        if n < step:
+            cls, dot = "ds-step ds-step-done", "✓"
+        elif n == step:
+            cls, dot = "ds-step ds-step-active", str(n)
+        else:
+            cls = "ds-step ds-step-optional" if optional else "ds-step ds-step-locked"
+            dot = str(n)
+        suffix = " *" if optional else ""
+        parts.append(f'<span class="{cls}">{dot}. {lbl}{suffix}</span>')
+        if i < len(labels) - 1:
+            parts.append('<span class="ds-step-arrow">›</span>')
+    st.markdown(
+        '<div class="ds-stepbar">'
+        + "".join(parts)
+        + '<span style="margin-left:auto;font-size:0.65rem;color:#9ca3af;white-space:nowrap;flex-shrink:0;">'
+        + '* etapa opcional</span>'
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def done_bar(text: str, change_key: str, reset_keys: list[str]) -> None:
+    col1, col2 = st.columns([10, 1])
+    with col1:
+        st.markdown(
+            f'<div class="ds-done-bar"><span class="ds-done-label">{text}</span></div>',
+            unsafe_allow_html=True,
+        )
+    with col2:
+        if st.button("Editar", key=change_key, help="Alterar"):
+            for k in reset_keys:
+                ss[k] = _defaults[k]
+            st.rerun()
+
+
+def info_box(text: str) -> None:
+    """Caixa de informação cinza — padrão da identidade visual."""
+    st.markdown(
+        f'<div class="ds-info-box">{text}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def warn_box(text: str) -> None:
+    """Caixa de aviso cinza com borda âmbar — padrão da identidade visual."""
+    st.markdown(
+        f'<div class="ds-warn-box">{text}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def step_title(n: int, title: str, caption: str = "") -> None:
+    st.markdown(
+        f'<p class="ds-section-title">Passo {n} — {title}</p>'
+        + (f'<p class="ds-section-caption">{caption}</p>' if caption else ""),
+        unsafe_allow_html=True,
+    )
+
+
+def render_sidebar() -> None:
+    with st.sidebar:
+        st.markdown(
+            '<div class="ds-sidebar-note">'
+            '<div class="ds-sidebar-note-box">'
+            '<strong style="color:#374151">Nota:</strong> Esta análise é independente e baseada em dados '
+            'públicos da plataforma DATASUS. Não representa posicionamento oficial do Ministério da Saúde.'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown('<p class="sb-title">Pipeline</p>', unsafe_allow_html=True)
+
+        # Step 1: Desfecho
+        if ss.get("outcome_key"):
+            _ok2 = ss["outcome_key"]
+            o = _DiyOutcome() if _ok2 == "__diy__" else OUTCOMES[_ok2]
+            src_txt = ", ".join(o.data_sources)
+            st.markdown(
+                f'<div class="sb-step">'
+                f'<div class="sb-step-label">1 · Desfecho</div>'
+                f'<div class="sb-step-value">{o.name}<br>'
+                f'<span style="font-size:.7rem;color:var(--muted)">{src_txt}</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Editar", key="sb_chg_outcome"):
+                for k in ["outcome_key", "raw_data", "cohort", "feature_config",
+                          "treatment_config", "model_config", "model_results",
+                          "calib_results", "comparison_results", "manual_needed"]:
+                    ss[k] = _defaults[k]
+                ss.pop("active_sections", None)
+                st.rerun()
+
+        # Step 2: Dados
+        if ss.get("raw_data"):
+            lines = "<br>".join(f"{src}: {len(df):,}" for src, df in ss["raw_data"].items())
+            st.markdown(
+                f'<div class="sb-step">'
+                f'<div class="sb-step-label">2 · Dados</div>'
+                f'<div class="sb-step-value">{lines}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Editar", key="sb_chg_data"):
+                for k in ["raw_data", "cohort", "feature_config", "treatment_config",
+                          "model_config", "model_results", "calib_results",
+                          "comparison_results", "manual_needed"]:
+                    ss[k] = _defaults[k]
+                ss.pop("active_sections", None)
+                st.rerun()
+
+        # Step 3: Coorte
+        if ss.get("cohort") is not None:
+            n_ = len(ss["cohort"])
+            st.markdown(
+                f'<div class="sb-step">'
+                f'<div class="sb-step-label">3 · Coorte</div>'
+                f'<div class="sb-step-value">{n_:,} registros</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Editar", key="sb_chg_cohort"):
+                ss["cohort"] = None
+                for k in ["feature_config", "treatment_config", "model_config",
+                          "model_results", "calib_results", "comparison_results"]:
+                    ss[k] = _defaults[k]
+                st.rerun()
+
+        # Step 4: Features
+        if ss.get("feature_config"):
+            fc_ = ss["feature_config"]
+            n_f = len(fc_["selected_features"])
+            st.markdown(
+                f'<div class="sb-step">'
+                f'<div class="sb-step-label">4 · Features</div>'
+                f'<div class="sb-step-value">{n_f} variáveis</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Editar", key="sb_chg_features"):
+                for k in ["feature_config", "treatment_config", "model_config",
+                          "model_results", "calib_results", "comparison_results"]:
+                    ss[k] = _defaults[k]
+                st.rerun()
+
+        # Step 5: Tratamento
+        if ss.get("treatment_config"):
+            tc_ = ss["treatment_config"]
+            _num_lbl = {"none": "Sem escala", "standard": "Z-score", "minmax": "Min-Max", "robust": "Robust", "bin": "Binning"}.get(
+                tc_.get("num_default", "none"), "—")
+            _cat_lbl = {"none": "Sem trat.", "ohe": "One-Hot", "ordinal": "Ordinal", "target": "Target", "drop": "Remover"}.get(
+                tc_.get("cat_default", "none"), "—")
+            _n_ov = len(tc_.get("overrides", {}))
+            st.markdown(
+                f'<div class="sb-step">'
+                f'<div class="sb-step-label">5 · Tratamento</div>'
+                f'<div class="sb-step-value">'
+                f'Num: {_num_lbl} · Cat: {_cat_lbl}'
+                + (f'<br><span style="font-size:.7rem;color:var(--muted)">{_n_ov} ajuste(s) manual(is)</span>' if _n_ov else "")
+                + f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Editar", key="sb_chg_treatment"):
+                for k in ["treatment_config", "model_config", "model_results",
+                          "calib_results", "comparison_results"]:
+                    ss[k] = _defaults[k]
+                st.rerun()
+
+        # Step 6: Modelo configurado
+        if ss.get("model_config"):
+            cfg_ = ss["model_config"]
+            if cfg_["val_strategy"] == "Validação cruzada (k-fold)":
+                _vs = f"{cfg_['n_folds']}-fold CV"
+            elif cfg_["val_strategy"] == "Validação Temporal":
+                _vs = f"Temporal · {cfg_.get('temporal_cutoff', '')[:7]}"
+            else:
+                _vs = f"Holdout {cfg_['holdout_size']:.0%}"
+            _fc_ = ss.get("feature_config") or {}
+            _nf = len(_fc_.get("selected_features", []))
+            _albl = " · ".join(cfg_.get("algo_labels", [cfg_["algo_label"]]))
+            st.markdown(
+                f'<div class="sb-step">'
+                f'<div class="sb-step-label">6 · Modelo</div>'
+                f'<div class="sb-step-value">{_albl}<br>'
+                f'<span style="font-size:.7rem;color:var(--muted)">{_vs} · {_nf} features</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Editar", key="sb_chg_model_config"):
+                for k in ["model_config", "model_results", "calib_results", "comparison_results"]:
+                    ss[k] = _defaults[k]
+                ss.pop("mc_results", None)  # multicalibração obsoleta após reconfigurar
+                st.rerun()
+
+        # Step 5: Treinamento
+        if ss.get("model_results"):
+            r_ = ss["model_results"]
+            m_ = r_["mean_metrics"]
+            st.markdown(
+                f'<div class="sb-step">'
+                f'<div class="sb-step-label">7 · Treinamento</div>'
+                f'<div class="sb-step-value">'
+                f'AUC {m_["roc_auc"]:.3f} · F1 {m_["f1"]:.3f}<br>'
+                f'<span style="font-size:.7rem;color:var(--muted)">PR-AUC {m_["pr_auc"]:.3f}</span>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Retreinar", key="sb_chg_model"):
+                for k in ["model_results", "calib_results", "comparison_results"]:
+                    ss[k] = _defaults[k]
+                ss.pop("mc_results", None)  # multicalibração obsoleta após retreinar
+                st.rerun()
+
+
+# ── Topbar + wrapper ──────────────────────────────────────────────────────────
+render_topbar()
+render_sidebar()
+st.markdown('<div class="ds-page">', unsafe_allow_html=True)
+render_step_bar(current_step())
+
+
+_is_diy = ss["outcome_key"] == "__diy__"
+outcome = _DiyOutcome(
+    target_col=ss.get("upload_target") or "target",
+    suggested_features=ss.get("upload_features") or [],
+) if _is_diy else OUTCOMES[ss["outcome_key"]]
+
+# ── Lazy: módulos de dados e visualização (step 2+) ──────────────────────────
+pd = _pd()
+px = _px()
+STATES, ManualUploadRequired, fetch, load_from_csv = _dl()
+
+# ─── Steps 2-3: apenas quando coorte ainda não foi construída ────────────────
+if ss["cohort"] is None:
+    # ═════════════════════════════════════════════════════════════════════════
+    # ETAPA 2 — DADOS
+    # ═════════════════════════════════════════════════════════════════════════
+    if not ss["raw_data"]:
+        # DIY: upload_df was set in upload.py → inject as raw_data and proceed
+        if _is_diy and ss.get("upload_df") is not None:
+            ss["raw_data"] = {"UPLOAD": ss["upload_df"]}
+            st.rerun()
+
+        # Upload-status outcomes with no raw_data → redirect to upload page
+        _UPLOAD_KEYS = {
+            "dengue_grave", "chikungunya_hospitalizado",
+            "obito_aids", "sifilis_nao_cura", "intoxicacao_grave",
+        }
+        if ss["outcome_key"] in _UPLOAD_KEYS and not _is_diy:
+            st.switch_page("pages/upload.py")
+
+        step_title(2, "Dados",
+                   f"Fontes necessárias para este desfecho: {', '.join(outcome.data_sources)}")
+
+        # ── Linha 1: Estado + Ano + Botão ─────────────────────────────────────────
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            ss["sel_states"] = st.multiselect("Estados (UF)", STATES, default=ss["sel_states"])
+        with c2:
+            ss["sel_years"] = st.multiselect("Anos", list(range(2018, 2025)), default=ss["sel_years"])
+
+        if not ss["sel_states"] or not ss["sel_years"]:
+            st.warning("Selecione pelo menos um estado e um ano para continuar.")
+            st.stop()
+
+        with c3:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            _download_clicked = st.button("Baixar", type="primary")
+
+        # ── Linha 2: Limite de registros ───────────────────────────────────────────
+        st.markdown("<div style='margin-top:.75rem'></div>", unsafe_allow_html=True)
+        with st.expander("Limite de registros por download", expanded=False):
+            sa1, sa2 = st.columns(2)
+            with sa1:
+                ss["sample_n"] = st.number_input(
+                    "Máximo de registros",
+                    min_value=1_000,
+                    max_value=500_000,
+                    value=ss["sample_n"],
+                    step=5_000,
+                    help="Limita o download para evitar falta de memória. Padrão: 1.000. Use 500.000 para dados completos.",
+                )
+            with sa2:
+                ss["sample_seed"] = st.number_input(
+                    "Seed (reprodutibilidade)",
+                    min_value=0, max_value=99_999,
+                    value=ss["sample_seed"], step=1,
+                    help="Seed aleatória para garantir resultados reproduzíveis.",
+                )
+            st.caption(
+                f"Serão baixados até **{ss['sample_n']:,}** registros com seed **{ss['sample_seed']}**. "
+                "O limite é aplicado durante a leitura dos arquivos para economizar memória."
+            )
+
+        if _download_clicked:
+            raw_data: dict = {}
+            manual_needed: list = []
+            _sample_n    = int(ss["sample_n"])
+            _sample_seed = int(ss["sample_seed"])
+            # Quota por arquivo para não estourar memória antes do concat
+            _quota_per_file = max(1_000, _sample_n // max(len(ss["sel_states"]) * len(ss["sel_years"]), 1))
+
+            for source in outcome.data_sources:
+                prog = st.progress(0.0, text=f"Baixando {source}…")
+                try:
+                    dfs = []
+                    for state in ss["sel_states"]:
+                        for year in ss["sel_years"]:
+                            # max_rows limita leitura dentro do _dbc_to_df (evita OOM)
+                            part = fetch(
+                                source, state, year,
+                                progress_callback=lambda p, m, _p=prog: _p.progress(min(p, 1.0), text=m),
+                                max_rows=_quota_per_file,
+                            )
+                            dfs.append(part)
+
+                    df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+                    # ── Garante o total exato após concat ──────────────────────────
+                    if len(df) > _sample_n:
+                        df = df.sample(n=_sample_n, random_state=_sample_seed).reset_index(drop=True)
+                        prog.progress(1.0, text=f"{source}: {len(df):,} registros (limitado a {_sample_n:,})")
+                    else:
+                        prog.progress(1.0, text=f"{source}: {len(df):,} registros")
+
+                    raw_data[source] = df
+                except ManualUploadRequired as e:
+                    prog.empty()
+                    manual_needed.append((source, str(e)))
+                except Exception as e:
+                    prog.empty()
+                    st.error(f"Erro ao baixar {source}: {e}")
+
+            ss["raw_data"] = raw_data
+            ss["cohort"] = None
+            ss["model_config"] = None
+            ss["model_results"] = None
+            ss["manual_needed"] = manual_needed
+            if raw_data and not manual_needed:
+                st.rerun()
+
+        if ss["manual_needed"]:
+            st.warning("Upload manual necessário para alguns arquivos.")
+            raw_data = ss.get("raw_data", {})
+            for source, msg in ss["manual_needed"]:
+                with st.expander(f"Upload: {source}", expanded=True):
+                    st.caption(msg)
+                    uploaded = st.file_uploader(
+                        f"CSV do {source}", type=["csv", "txt"], key=f"up_{source}"
+                    )
+                    if uploaded:
+                        try:
+                            s0 = ss["sel_states"][0] if len(ss["sel_states"]) == 1 else "BR"
+                            y0 = ss["sel_years"][0] if len(ss["sel_years"]) == 1 else 0
+                            df = load_from_csv(uploaded.read(), source, s0, y0)
+                            raw_data[source] = df
+                            ss["raw_data"] = raw_data
+                            ss["cohort"] = None
+                            st.success(f"{source}: {len(df):,} registros.")
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+            if set(outcome.data_sources) <= set(raw_data.keys()):
+                ss["manual_needed"] = []
+                st.rerun()
+
+        st.stop()
+
+    # ── Lazy: CohortBuilder ───────────────────────────────────────────────────
+    CohortBuilder = _cohort()
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    st.markdown("**Revisar e Construir Coorte**")
+    st.caption("Revise os dados baixados e confirme para construir a coorte de modelagem.")
+
+    # ── Preview dos dados brutos ──────────────────────────────────────────────
+    _sources = list(ss["raw_data"].keys())
+    _tabs = st.tabs(_sources) if len(_sources) > 1 else [st.container()]
+
+    for _tab, _src in zip(_tabs, _sources):
+        with _tab:
+            _df = ss["raw_data"][_src]
+            _n, _k = _df.shape
+
+            # Linha de resumo
+            _c1, _c2, _c3 = st.columns(3)
+            _c1.metric("Registros", f"{_n:,}")
+            _c2.metric("Colunas", str(_k))
+            _miss_total = int(_df.isna().sum().sum())
+            _miss_pct = _miss_total / max(_n * _k, 1)
+            _c3.metric("Completude geral", f"{1 - _miss_pct:.1%}")
+
+            # Sumário estatístico
+            with st.expander("Sumário estatístico", expanded=False):
+                import plotly.express as _px_s
+                import math as _math
+
+                _num = _df.select_dtypes(include="number")
+                _cat = _df.select_dtypes(exclude="number")
+
+                if not _num.empty:
+                    st.markdown("**Variáveis numéricas**")
+                    st.dataframe(_num.describe().T.round(2), use_container_width=True)
+
+                if not _cat.empty:
+                    st.markdown("**Distribuição de variáveis categóricas**")
+                    _cat_cols_all = _cat.columns.tolist()
+                    _MAX_CAT = 12
+                    _cat_cols = _cat_cols_all[:_MAX_CAT]
+                    if len(_cat_cols_all) > _MAX_CAT:
+                        st.caption(
+                            f"Exibindo {_MAX_CAT} de {len(_cat_cols_all)} variáveis categóricas."
+                        )
+                    _ncols = 2
+                    _nrows = _math.ceil(len(_cat_cols) / _ncols)
+                    for _row_i in range(_nrows):
+                        _grid = st.columns(_ncols)
+                        for _col_i in range(_ncols):
+                            _ci = _row_i * _ncols + _col_i
+                            if _ci >= len(_cat_cols):
+                                break
+                            _col_name = _cat_cols[_ci]
+                            _vc = (
+                                _df[_col_name]
+                                .astype(str)
+                                .value_counts()
+                                .reset_index()
+                            )
+                            _vc.columns = ["Categoria", "Contagem"]
+                            _fig_cat = _px_s.bar(
+                                _vc,
+                                x="Categoria",
+                                y="Contagem",
+                                title=_col_name,
+                                color="Contagem",
+                                color_continuous_scale="Blues",
+                            )
+                            _fig_cat.update_layout(
+                                coloraxis_showscale=False,
+                                margin=dict(l=0, r=0, t=40, b=0),
+                                plot_bgcolor="white",
+                                paper_bgcolor="white",
+                                showlegend=False,
+                                height=280,
+                                font=dict(size=11),
+                            )
+                            _fig_cat.update_xaxes(tickangle=-35)
+                            _grid[_col_i].plotly_chart(_fig_cat, use_container_width=True)
+
+                if _num.empty and _cat.empty:
+                    st.caption("Nenhuma coluna encontrada.")
+
+            # Completude por coluna — visualização de padrão de ausências
+            with st.expander("Completude por coluna", expanded=False):
+                import plotly.graph_objects as _go_miss
+                import numpy as _np_miss
+                from plotly.subplots import make_subplots as _make_sub
+
+                _miss_s = _df.isna().mean().sort_values(ascending=True)  # menor missing à esquerda
+                _high = (_miss_s * 100) > 50
+
+                # Amostra de até 300 linhas para manter performance
+                _MAX_VIS = 300
+                _df_vis = (
+                    _df.sample(n=_MAX_VIS, random_state=42).reset_index(drop=True)
+                    if len(_df) > _MAX_VIS else _df.reset_index(drop=True)
+                )
+                # Ordena colunas: mais completas à esquerda
+                _col_ord = _miss_s.index.tolist()
+                _present = (~_df_vis[_col_ord].isna()).astype(int)
+                _n_rows, _n_cols = _present.shape
+
+                # completude por linha (para sparkline lateral)
+                _row_comp = _present.mean(axis=1).values
+
+                # ── subplots: matriz + sparkline ──────────────────────────────
+                _mfig = _make_sub(
+                    rows=1, cols=2,
+                    column_widths=[0.92, 0.08],
+                    horizontal_spacing=0.01,
+                )
+
+                # Heatmap principal
+                _mfig.add_trace(
+                    _go_miss.Heatmap(
+                        z=_present.values,
+                        x=_col_ord,
+                        y=list(range(1, _n_rows + 1)),
+                        colorscale=[[0, "#ffffff"], [1, "#374151"]],
+                        showscale=False,
+                        xgap=1, ygap=0,
+                        customdata=_np_miss.where(_present.values == 1, "Preenchido", "Missing"),
+                        hovertemplate="Coluna: %{x}<br>Linha: %{y}<br>%{customdata}<extra></extra>",
+                    ),
+                    row=1, col=1,
+                )
+
+                # Sparkline de completude por linha (lado direito)
+                _mfig.add_trace(
+                    _go_miss.Scatter(
+                        x=_row_comp,
+                        y=list(range(1, _n_rows + 1)),
+                        mode="lines",
+                        line=dict(color="#374151", width=1),
+                        showlegend=False,
+                        hovertemplate="Completude: %{x:.0%}<extra></extra>",
+                    ),
+                    row=1, col=2,
+                )
+
+                _chart_h = max(340, min(_n_rows * 2, 520))
+                _mfig.update_layout(
+                    height=_chart_h,
+                    margin=dict(t=60, b=20, l=10, r=10),
+                    plot_bgcolor="white",
+                    paper_bgcolor="white",
+                    font=dict(size=10),
+                )
+                # Eixo X do heatmap — labels rotacionados no topo
+                _mfig.update_xaxes(
+                    tickangle=-60, side="top",
+                    showgrid=False, row=1, col=1,
+                )
+                # Eixo Y — mostra início e fim
+                _mfig.update_yaxes(
+                    autorange="reversed",
+                    tickvals=[1, _n_rows],
+                    ticktext=["1", str(len(_df_vis))],
+                    showgrid=False, row=1, col=1,
+                )
+                # Sparkline: eixo X (0–1), sem labels
+                _mfig.update_xaxes(
+                    range=[0, 1], showticklabels=False,
+                    showgrid=False, row=1, col=2,
+                )
+                _mfig.update_yaxes(
+                    autorange="reversed", showticklabels=True,
+                    tickvals=[1, _n_rows],
+                    ticktext=["1", str(len(_df_vis))],
+                    showgrid=False, row=1, col=2,
+                )
+
+                st.caption(
+                    f"Matriz de ausências — branco = missing, cinza = preenchido · "
+                    f"{len(_df_vis)} observações exibidas"
+                    + (f" (amostra de {len(_df)})" if len(_df) > _MAX_VIS else "")
+                )
+                st.plotly_chart(_mfig, use_container_width=True)
+
+                # Resumo quantitativo compacto abaixo da matriz
+                _miss_pct_df = pd.DataFrame({
+                    "Coluna": _miss_s.index,
+                    "Missing (%)": (_miss_s.values * 100).round(1),
+                }).sort_values("Missing (%)", ascending=False)
+                _cols_with_miss = _miss_pct_df[_miss_pct_df["Missing (%)"] > 0]
+                if not _cols_with_miss.empty:
+                    with st.expander(f"{len(_cols_with_miss)} coluna(s) com dados ausentes"):
+                        st.dataframe(
+                            _cols_with_miss.reset_index(drop=True),
+                            use_container_width=True, hide_index=True,
+                        )
+                if _high.any():
+                    st.caption(
+                        f"{int(_high.sum())} coluna(s) com mais de 50% de missing — "
+                        "serão imputadas pela mediana no pipeline."
+                    )
+
+            # Amostra
+            with st.expander("Amostra dos dados (10 linhas)"):
+                st.dataframe(_df.head(10), use_container_width=True, hide_index=True)
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    if st.button("Construir Coorte", type="primary"):
+        with st.spinner("Construindo coorte…"):
+            try:
+                if _is_diy:
+                    # DIY: data is already in final form — skip build_cohort/build_features
+                    ss["cohort"] = ss["raw_data"]["UPLOAD"]
+                else:
+                    builder = CohortBuilder(outcome)
+                    ss["cohort"] = builder.build(ss["raw_data"])
+                ss["model_config"] = None
+                ss["model_results"] = None
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao construir coorte: {e}")
+                st.exception(e)
+    st.stop()
+
+# ─── COHORT BUILT: Steps 4-9 ────────────────────────────────────────────────
+
+# ── Lazy: CohortBuilder e pipeline ML ────────────────────────────────────────
+CohortBuilder = _cohort()
+ALGORITHMS, train_cv, optimize_hyperparams, calibrate_model, build_pipeline, random_search, grid_search = _pipeline()
+
+cohort = ss["cohort"]
+builder = CohortBuilder(outcome)
+
+if _is_diy or ss.get("upload_target"):
+    # Custom target (DIY or upload outcome with overridden target col)
+    _custom_target = ss.get("upload_target") or outcome.target_col
+    _custom_features = ss.get("upload_features") or []
+    try:
+        y = cohort[_custom_target].astype(int)
+    except (KeyError, ValueError) as _e:
+        st.error(f"Coluna de desfecho '{_custom_target}' não encontrada ou não é binária. Volte ao upload e ajuste.")
+        st.stop()
+    if _custom_features:
+        _feat_in_cohort = [c for c in _custom_features if c in cohort.columns and c != _custom_target]
+    else:
+        _feat_in_cohort = [c for c in cohort.columns if c != _custom_target]
+    X = cohort[_feat_in_cohort].copy()
+else:
+    X, y = builder.get_Xy(cohort)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ETAPA 4 — FEATURES
+# ═════════════════════════════════════════════════════════════════════════════
+if not ss.get("feature_config"):
+    from core.features.data_dict import get_info as _feat_info
+
+    step_title(3, "Selecionar Features",
+               "Escolha as variáveis a incluir no modelo e consulte o dicionário de dados.")
+
+    bal = builder.class_balance(cohort)
+    total_n = bal["total"]
+    all_features = X.columns.tolist()
+    info_box(
+        f"<b>{total_n:,}</b> registros · prevalência <b>{bal['prevalence']:.1%}</b> · "
+        f"<b>{len(all_features)}</b> features disponíveis"
+    )
+
+    selected_features = st.multiselect(
+        "Features para o modelo",
+        all_features,
+        default=all_features,
+        help="Selecione as variáveis a usar no modelo. Remova features irrelevantes ou com alto missing.",
+    )
+    if not selected_features:
+        st.warning("Selecione pelo menos uma feature.")
+        st.stop()
+
+    # ── Distribuição do desfecho ───────────────────────────────────────────
+    with st.expander(f"Distribuição do desfecho — coluna `{outcome.target_col}`", expanded=False):
+        _pos = bal["positive"]
+        _neg = bal["negative"]
+        _tot = bal["total"]
+        _prev = bal["prevalence"]
+        st.caption(
+            f"Coluna alvo: **{outcome.target_col}** · {_tot:,} registros · "
+            f"prevalência {_prev:.1%}"
+        )
+        _dc1, _dc2 = st.columns(2)
+        with _dc1:
+            st.metric(
+                label=f"Classe 1 — {outcome.name} (positivo)",
+                value=f"{_pos:,}",
+                delta=f"{_prev:.1%} do total",
+                delta_color="off",
+            )
+        with _dc2:
+            st.metric(
+                label="Classe 0 — Sem desfecho (negativo)",
+                value=f"{_neg:,}",
+                delta=f"{1 - _prev:.1%} do total",
+                delta_color="off",
+            )
+        # Mini bar visual
+        _bar_pos = max(1, round(_prev * 60))
+        _bar_neg = 60 - _bar_pos
+        st.markdown(
+            f"<div style='margin:8px 0 4px'>"
+            f"<div style='display:flex;height:10px;border-radius:5px;overflow:hidden'>"
+            f"<div style='width:{_bar_pos/60*100:.1f}%;background:#223886'></div>"
+            f"<div style='width:{_bar_neg/60*100:.1f}%;background:#e5e7eb'></div>"
+            f"</div>"
+            f"<div style='display:flex;justify-content:space-between;font-size:.75rem;color:#6b7280;margin-top:3px'>"
+            f"<span>Positivo ({_prev:.1%})</span>"
+            f"<span>Negativo ({1-_prev:.1%})</span>"
+            f"</div></div>",
+            unsafe_allow_html=True,
+        )
+        if _prev < 0.05:
+            st.warning(
+                "Prevalência abaixo de 5% — dataset fortemente desbalanceado. "
+                "Considere usar balanceamento (SMOTE ou class weight) na etapa de configuração do modelo."
+            )
+
+    # ── Dicionário de dados ────────────────────────────────────────────────
+    _custom_dict_raw = ss.get("upload_dict")
+    _custom_dict: dict = _custom_dict_raw if isinstance(_custom_dict_raw, dict) else {}
+    _dict_editable = _is_diy or bool(ss.get("upload_target"))
+    _expander_label = f"Dicionário de dados — {len(selected_features)} features selecionadas"
+    if _dict_editable:
+        _expander_label += " (editável)"
+    with st.expander(_expander_label, expanded=False):
+        _type_colors = {
+            "Numérica": "#111827",
+            "Categórica": "#374151",
+            "Ordinal": "#374151",
+            "Derivada": "#6b7280",
+        }
+        for _feat in selected_features:
+            _info = _feat_info(_feat)
+            _uentry_raw = _custom_dict.get(_feat, {})
+            _uentry = _uentry_raw if isinstance(_uentry_raw, dict) else {}
+            # Merge: data_dict.py wins over custom_dict for known vars; custom wins for unknown
+            if not _info and _uentry:
+                _info = _uentry
+            _col_a, _col_b = st.columns([3, 1])
+            with _col_a:
+                if _info and _info.get("label"):
+                    st.markdown(
+                        f"**{_feat}** &nbsp;—&nbsp; {_info['label']}  \n"
+                        f"<span style='font-size:.8rem;color:#4b5563'>{_info.get('desc', '')}</span>",
+                        unsafe_allow_html=True,
+                    )
+                elif _dict_editable:
+                    # Show inline text inputs for custom dict editing
+                    _new_lbl = st.text_input(
+                        f"Rótulo de {_feat}", value=_uentry.get("label", ""),
+                        placeholder=f"Rótulo para {_feat}",
+                        key=f"dict_edit_lbl_{_feat}",
+                        label_visibility="collapsed",
+                    )
+                    _new_desc = st.text_input(
+                        f"Descrição de {_feat}", value=_uentry.get("desc", ""),
+                        placeholder="Descrição opcional…",
+                        key=f"dict_edit_desc_{_feat}",
+                        label_visibility="collapsed",
+                    )
+                    if _new_lbl or _new_desc:
+                        _custom_dict[_feat] = {
+                            "label": _new_lbl or _feat,
+                            "desc": _new_desc,
+                            "type": _uentry.get("type", ""),
+                        }
+                        ss["upload_dict"] = _custom_dict
+                else:
+                    st.markdown(
+                        f"**{_feat}**  \n"
+                        f"<span style='font-size:.8rem;color:#9ca3af'>Sem descrição disponível.</span>",
+                        unsafe_allow_html=True,
+                    )
+            with _col_b:
+                _type_lbl = (_info.get("type", "") if _info else "") or _uentry.get("type", "")
+                if _type_lbl:
+                    _type_color = _type_colors.get(_type_lbl, "#6b7280")
+                    st.markdown(
+                        f"<div style='text-align:right;margin-top:2px'>"
+                        f"<span style='font-size:.68rem;font-weight:600;color:{_type_color}'>"
+                        f"{_type_lbl}</span></div>",
+                        unsafe_allow_html=True,
+                    )
+            st.markdown("<hr style='border:none;border-top:1px solid #f3f4f6;margin:6px 0'>",
+                        unsafe_allow_html=True)
+
+    if st.button("Confirmar Features", type="primary"):
+        ss["feature_config"] = {"selected_features": selected_features}
+        ss["treatment_config"] = None
+        ss["model_config"] = None
+        ss["model_results"] = None
+        ss["calib_results"] = None
+        ss["comparison_results"] = []
+        st.rerun()
+    st.stop()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ETAPA 5 — TRATAMENTO DE VARIÁVEIS
+# ═════════════════════════════════════════════════════════════════════════════
+if not ss.get("treatment_config"):
+    step_title(4, "Tratamento de Variáveis",
+               "Classifique o tipo de cada variável e configure o tratamento.")
+
+    _sel_feats = ss["feature_config"]["selected_features"]
+    X_sel = X[_sel_feats]
+    _num_cols_orig = X_sel.select_dtypes(include="number").columns.tolist()
+    _cat_cols_orig = X_sel.select_dtypes(include=["object", "category"]).columns.tolist()
+    _low_card = [c for c in _num_cols_orig if 1 < X_sel[c].nunique() <= 10]
+
+    # ── Passo 1: Classificar tipo por variável ────────────────────────────────
+    st.markdown("**Passo 1 — Classificar tipo de cada variável**")
+    if _low_card:
+        st.caption(
+            f"Variáveis com baixa cardinalidade: **{', '.join(_low_card)}** — "
+            "podem ser tratadas como categóricas."
+        )
+
+    from core.features.data_dict import get_info as _dd_info
+    _type_opts = ["Numérica", "Categórica", "Remover"]
+    _type_result: dict = {}
+
+    def _infer_type(col: str) -> str:
+        """Infer variable type from data dictionary; fall back to pandas dtype."""
+        info = _dd_info(col)
+        if info:
+            dd_type = info.get("type", "")
+            if dd_type == "Numérica":
+                return "Numérica"
+            if dd_type in ("Categórica", "Ordinal"):
+                return "Categórica"
+        # fallback: pandas dtype
+        return "Numérica" if col in _num_cols_orig else "Categórica"
+
+    with st.expander(f"Classificação por variável — {len(_sel_feats)} features", expanded=False):
+        _th1, _th2, _th3 = st.columns([3, 2, 1])
+        _th1.markdown("<div style='font-size:.72rem;font-weight:600;color:#6b7280'>VARIÁVEL</div>", unsafe_allow_html=True)
+        _th2.markdown("<div style='font-size:.72rem;font-weight:600;color:#6b7280'>TIPO</div>", unsafe_allow_html=True)
+        _th3.markdown("<div style='font-size:.72rem;font-weight:600;color:#6b7280'>INFO</div>", unsafe_allow_html=True)
+        for _col in _sel_feats:
+            _nuniq = X_sel[_col].nunique()
+            _inferred = _infer_type(_col)
+            _vc1, _vc2, _vc3 = st.columns([3, 2, 1])
+            with _vc1:
+                st.markdown(
+                    f"<div style='padding:5px 0;font-size:.82rem'><b>{_col}</b> "
+                    f"<span style='color:#9ca3af;font-size:.72rem'>({_nuniq} únicos)</span></div>",
+                    unsafe_allow_html=True,
+                )
+            with _vc2:
+                _type_result[_col] = st.selectbox(
+                    _col, _type_opts,
+                    index=_type_opts.index(_inferred),
+                    key=f"type_{_col}",
+                    label_visibility="collapsed",
+                )
+            with _vc3:
+                if _col in _low_card:
+                    st.markdown(
+                        "<div style='padding:5px 0;font-size:.68rem;color:#d97706'>baixa card.</div>",
+                        unsafe_allow_html=True,
+                    )
+
+    # Listas finais baseadas na classificação do usuário
+    _num_cols = [c for c, t in _type_result.items() if t == "Numérica"]
+    _cat_cols = [c for c, t in _type_result.items() if t == "Categórica"]
+
+    _ti1, _ti2, _ti3 = st.columns(3)
+    _ti1.metric("Numéricas", str(len(_num_cols)))
+    _ti2.metric("Categóricas", str(len(_cat_cols)))
+    _ti3.metric("Removidas", str(len(_sel_feats) - len(_num_cols) - len(_cat_cols)))
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # ── Passo 2: Configurar tratamento ────────────────────────────────────────
+    st.markdown("**Passo 2 — Configurar tratamento**")
+
+    _all_num_opts = ["none", "standard", "minmax", "robust", "bin", "drop"]
+    _all_cat_opts = ["ohe", "ordinal", "target", "drop"]
+    _num_lbl_map = {
+        "none": "Nenhuma", "standard": "Z-score", "minmax": "Min-Max",
+        "robust": "Robust", "bin": "Binning", "drop": "Remover",
+    }
+    _cat_lbl_map = {"ohe": "One-Hot", "ordinal": "Ordinal", "target": "Target", "drop": "Remover"}
+
+    _num_map = {
+        "Nenhuma (recomendado para árvores)": "none",
+        "Padronização Z-score": "standard",
+        "Normalização Min-Max": "minmax",
+        "Escala Robusta (Robust Scaling)": "robust",
+        "Discretização (Binning)": "bin",
+    }
+    _cat_map = {
+        "Sem tratamento (recomendado para árvores)": "none",
+        "One-Hot Encoding": "ohe",
+        "Ordinal Encoding": "ordinal",
+        "Target Encoding": "target",
+        "Remover": "drop",
+    }
+
+    _overrides: dict = {}
+
+    # ── Row 1: radio buttons (altura independente por coluna) ──────────────────
+    _r1, _r2 = st.columns(2)
+    with _r1:
+        st.markdown("**Variáveis Numéricas**")
+        _num_opt = st.radio(
+            "Escala padrão",
+            list(_num_map.keys()),
+            label_visibility="collapsed",
+            help=(
+                "**Nenhuma**: mantém valores originais — ideal para árvores (LightGBM, XGBoost, RF).  \n"
+                "**Z-score**: subtrai a média e divide pelo desvio padrão → média 0, desvio 1. "
+                "Ideal para regressão logística. Sensível a outliers.  \n"
+                "**Min-Max**: escala para o intervalo [0, 1]. Sensível a outliers extremos.  \n"
+                "**Robust Scaling**: usa mediana e IQR em vez de média e desvio padrão. "
+                "Menos sensível a outliers — boa alternativa ao Z-score quando há valores extremos.  \n"
+                "**Discretização (Binning)**: transforma a variável contínua em categorias ordinais "
+                "por quantis (5 faixas de tamanho igual). Pode ajudar modelos simples ou interpretação."
+            ),
+        )
+    with _r2:
+        st.markdown("**Variáveis Categóricas**")
+        _cat_opt = st.radio(
+            "Codificação padrão",
+            list(_cat_map.keys()),
+            label_visibility="collapsed",
+            help=(
+                "**Sem tratamento**: converte para código ordinal sem escala — recomendado para árvores.  \n"
+                "**One-Hot Encoding**: cria uma coluna binária (0/1) para cada categoria. "
+                "Aumenta dimensionalidade. Ideal para regressão logística com poucas categorias.  \n"
+                "**Ordinal Encoding**: converte categorias em inteiros com ordem natural "
+                "(ex: escolaridade, faixa etária). Mantém o número de colunas.  \n"
+                "**Target Encoding**: substitui cada categoria pela média do desfecho naquela categoria. "
+                "Útil para alta cardinalidade (muitas categorias únicas).  \n"
+                "**Remover**: exclui a variável do modelo."
+            ),
+        )
+
+    # Chaves padrão derivadas da seleção dos radio buttons
+    _num_default_key = _num_map[_num_opt]
+    _cat_default_key = _cat_map[_cat_opt]
+
+    # ── Ajustes por variável ──────────────────────────────────────────────────
+    _num_treat_opts = ["none", "standard", "minmax", "robust", "bin", "drop"]
+    _cat_treat_opts = ["none", "ohe", "ordinal", "target", "drop"]
+    _num_lbl = {
+        "none": "Nenhuma", "standard": "Z-score", "minmax": "Min-Max",
+        "robust": "Robust", "bin": "Binning", "drop": "Remover",
+    }
+    _cat_lbl = {"none": "Sem trat.", "ohe": "One-Hot", "ordinal": "Ordinal", "target": "Target", "drop": "Remover"}
+
+    # track effective type per column (after user override)
+    _eff_type: dict = {}      # col -> "num" | "cat"
+    _treat_override: dict = {}  # col -> treatment key
+
+    with st.expander(f"Ajustes por variável — {len(_sel_feats)} features", expanded=False):
+        # Header
+        _hc1, _hc2, _hc3 = st.columns([3, 2, 2])
+        for _hcol, _htxt in zip([_hc1, _hc2, _hc3],
+                                 ["Variável", "Tipo", "Tratamento"]):
+            _hcol.markdown(
+                f"<div style='font-size:.68rem;font-weight:700;color:#9ca3af;"
+                f"text-transform:uppercase;letter-spacing:.08em;padding-bottom:4px'>"
+                f"{_htxt}</div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown("<hr style='border:none;border-top:1px solid #f3f4f6;margin:0 0 4px'>",
+                    unsafe_allow_html=True)
+
+        for _col in _sel_feats:
+            _detected = "cat" if _col in _cat_cols else "num"
+            _nuniq = X_sel[_col].nunique()
+            _is_low = _col in _low_card
+
+            _vc1, _vc2, _vc3 = st.columns([3, 2, 2])
+
+            with _vc1:
+                _badge = (" <span style='font-size:.65rem;color:#d97706;"
+                          "font-weight:600'>baixa card.</span>") if _is_low else ""
+                st.markdown(
+                    f"<div style='padding:5px 0;font-size:.82rem'>"
+                    f"<b>{_col}</b>"
+                    f"<span style='color:#9ca3af;font-size:.72rem'> ({_nuniq} únicos)</span>"
+                    f"{_badge}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            with _vc2:
+                _type_sel = st.selectbox(
+                    f"type_{_col}",
+                    ["Numérica", "Categórica"],
+                    index=0 if _detected == "num" else 1,
+                    key=f"tp_{_col}",
+                    label_visibility="collapsed",
+                )
+                _eff = "num" if _type_sel == "Numérica" else "cat"
+                _eff_type[_col] = _eff
+
+            with _vc3:
+                if _eff == "num":
+                    _opts = _num_treat_opts
+                    _lbl_map = _num_lbl
+                    _def_idx = _opts.index(_num_default_key)
+                else:
+                    _opts = _cat_treat_opts
+                    _lbl_map = _cat_lbl
+                    _def_idx = _opts.index(_cat_default_key)
+
+                _treat_sel = st.selectbox(
+                    f"treat_{_col}",
+                    _opts,
+                    format_func=lambda x, m=_lbl_map: m[x],
+                    index=_def_idx,
+                    key=f"tr_{_col}",
+                    label_visibility="collapsed",
+                )
+                _expected = _num_default_key if _eff == "num" else _cat_default_key
+                if _treat_sel != _expected:
+                    _treat_override[_col] = _treat_sel
+
+            st.markdown("<hr style='border:none;border-top:1px solid #f9fafb;margin:0'>",
+                        unsafe_allow_html=True)
+
+    # Compute effective column lists after type overrides
+    _eff_num_cols = [c for c in _sel_feats if _eff_type.get(c, "num" if c in _num_cols else "cat") == "num"]
+    _eff_cat_cols = [c for c in _sel_feats if _eff_type.get(c, "num" if c in _num_cols else "cat") == "cat"]
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # ── Passo 3: Imputação de valores faltantes ───────────────────────────────
+    st.markdown("**Passo 3 — Imputação de valores faltantes**")
+    st.caption(
+        "No DATASUS, valores como **9** e **99** frequentemente codificam *Ignorado* ou "
+        "*Não informado*. Selecione os valores que devem ser substituídos por nulo antes "
+        "do treinamento — a imputação estatística (mediana / moda) será aplicada em seguida."
+    )
+    _sentinel_preset = [1, 2, 8, 9, 10, 98, 99, 999, 9999]
+    _null_sentinels: list = st.multiselect(
+        "Valores a tratar como nulo (None)",
+        options=_sentinel_preset,
+        default=[9, 99],
+        key="null_sentinels_multi",
+        help=(
+            "Valores selecionados serão substituídos por **NaN** em **todas** as colunas "
+            "antes de qualquer escala ou codificação. "
+            "A imputação estatística (mediana para numéricas, moda para categóricas) "
+            "preenche os NaN resultantes automaticamente."
+        ),
+    )
+    _custom_null_str = st.text_input(
+        "Adicionar valor não listado (opcional)",
+        placeholder="ex: 9999",
+        key="null_sentinel_custom",
+    )
+    if _custom_null_str.strip():
+        try:
+            _custom_null_val = int(_custom_null_str.strip())
+            if _custom_null_val not in _null_sentinels:
+                _null_sentinels = list(_null_sentinels) + [_custom_null_val]
+        except ValueError:
+            st.warning("Digite um número inteiro válido.")
+
+    if _null_sentinels:
+        st.caption(f"Valores que serão substituídos por None: **{sorted(_null_sentinels)}**")
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # Guard: verificar se há ao menos uma variável não removida
+    _all_removed = all(
+        _treat_override.get(c, _num_default_key if _eff_type.get(c, "num" if c in _num_cols else "cat") == "num" else _cat_default_key) == "drop"
+        for c in _sel_feats
+    )
+    if _all_removed:
+        st.error(
+            "Todas as variáveis estão marcadas como 'Remover' — "
+            "o modelo precisa de pelo menos uma feature. Ajuste o tratamento antes de confirmar."
+        )
+
+    if st.button("Confirmar Tratamento", type="primary", disabled=_all_removed):
+        ss["treatment_config"] = {
+            "num_cols": _eff_num_cols,
+            "cat_cols": _eff_cat_cols,
+            "num_default": _num_default_key,
+            "cat_default": _cat_default_key,
+            "overrides": _treat_override,
+            "null_sentinels": sorted(set(_null_sentinels)),
+        }
+        ss["model_config"] = None
+        ss["model_results"] = None
+        ss["calib_results"] = None
+        ss["comparison_results"] = []
+        st.rerun()
+    st.stop()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ETAPA 6 — CONFIGURAR MODELO
+# ═════════════════════════════════════════════════════════════════════════════
+if not ss.get("model_config"):
+    step_title(5, "Configurar Modelo",
+               "Configure os algoritmos, validação e hiperparâmetros.")
+    bal = builder.class_balance(cohort)
+    total_n = bal["total"]
+    info_box(
+        f"<b>{total_n:,}</b> registros · prevalência <b>{bal['prevalence']:.1%}</b> · "
+        f"<b>{len(X.columns)}</b> features disponíveis"
+    )
+
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+
+    # ── Algoritmos ────────────────────────────────────────────────────────────
+    from core.models.pipeline import TABPFN_AVAILABLE as _TABPFN_OK
+    # TabPFN só entra na lista quando realmente instalado neste ambiente
+    _algo_options = [k for k in ALGORITHMS.keys()
+                     if ALGORITHMS[k] != "tabpfn" or _TABPFN_OK]
+    algo_labels = st.multiselect(
+        "Algoritmos",
+        _algo_options,
+        default=["Random Forest"],
+        help="Selecione um ou mais algoritmos para treinar e comparar.",
+    )
+    if not _TABPFN_OK:
+        st.caption(
+            "ℹ️ **TabPFN** não aparece na lista: apesar de ser estado da arte para dados "
+            "tabulares, ele não está instalado neste ambiente (requer torch, ~1 GB). "
+            "Recomendo testá-lo em um ambiente com mais recursos (instalação dedicada ou GPU)."
+        )
+    if not algo_labels:
+        st.warning("Selecione pelo menos um algoritmo.")
+        st.stop()
+    algos = [ALGORITHMS[l] for l in algo_labels]
+
+    # Aviso XGBoost: lento sem GPU
+    if "xgb" in algos:
+        st.warning(
+            "**XGBoost** pode ser significativamente mais lento que LightGBM ou Random Forest, "
+            "especialmente com muitos dados ou em HPO com múltiplos trials. "
+            "Considere reduzir o número de trials ou usar LightGBM para treinamentos mais rápidos."
+        )
+
+    # Aviso TabPFN sobre limite de amostras (só aparece quando instalado e selecionado)
+    if "tabpfn" in algos:
+        from core.models.pipeline import TABPFN_MAX_TRAIN_SAMPLES, TABPFN_WARN_TRAIN_SAMPLES
+        _n_total = builder.class_balance(cohort)["total"]
+        if _n_total > TABPFN_MAX_TRAIN_SAMPLES:
+            st.error(
+                f"**TabPFN não suporta mais de {TABPFN_MAX_TRAIN_SAMPLES:,} amostras** "
+                f"(coorte atual: {_n_total:,}). "
+                "Reduza o tamanho da amostra no Passo 2 ou remova TabPFN da seleção."
+            )
+        elif _n_total > TABPFN_WARN_TRAIN_SAMPLES:
+            st.warning(
+                f"**TabPFN:** desempenho ótimo com até {TABPFN_WARN_TRAIN_SAMPLES:,} amostras "
+                f"(coorte atual: {_n_total:,}). Acima disso o modelo pode ser mais lento e menos preciso."
+            )
+
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+
+    # ── 3 blocos de configuração ──────────────────────────────────────────────
+    b1, b2, b3 = st.columns(3)
+
+    with b1:
+        st.markdown("**Estratégia de Validação**")
+        val_strategy = st.radio(
+            "Validação",
+            ["Validação cruzada (k-fold)", "Holdout (train/test)", "Validação Temporal"],
+            label_visibility="collapsed",
+        )
+        if val_strategy == "Validação cruzada (k-fold)":
+            n_folds = st.slider("Folds", 3, 10, 5)
+            holdout_size = 0.20
+            temporal_date_col = None
+            temporal_cutoff = None
+        elif val_strategy == "Holdout (train/test)":
+            holdout_size = st.select_slider(
+                "Proporção de teste",
+                options=[0.10, 0.15, 0.20, 0.25, 0.30],
+                value=0.20,
+                format_func=lambda x: f"{x:.0%}",
+            )
+            n_folds = 1
+            temporal_date_col = None
+            temporal_cutoff = None
+        else:
+            # Validação Temporal
+            import pandas as _pd_tmp
+            _date_candidates = [
+                c for c in cohort.columns
+                if _pd_tmp.api.types.is_datetime64_any_dtype(cohort[c])
+                or any(kw in c.upper() for kw in ["DT_", "DTNASC", "DATA", "DATE"])
+            ]
+            temporal_date_col = st.selectbox(
+                "Coluna de data",
+                options=_date_candidates if _date_candidates else cohort.columns.tolist(),
+                help="Coluna usada para ordenar os registros no tempo.",
+            )
+            # Calcula min/max da coluna selecionada
+            try:
+                _ts = _pd_tmp.to_datetime(cohort[temporal_date_col], errors="coerce").dropna()
+                _dt_min = _ts.min().date()
+                _dt_max = _ts.max().date()
+                _dt_default = _ts.quantile(0.80).date() if len(_ts) else _dt_min
+            except Exception:
+                import datetime
+                _dt_min = datetime.date(2018, 1, 1)
+                _dt_max = datetime.date(2024, 12, 31)
+                _dt_default = datetime.date(2023, 1, 1)
+            temporal_cutoff = st.date_input(
+                "Data de corte (treino ← antes · teste → depois)",
+                value=_dt_default,
+                min_value=_dt_min,
+                max_value=_dt_max,
+                help="Registros anteriores à data de corte são usados no treino; posteriores, no teste.",
+            )
+            # Info sobre tamanho do split
+            try:
+                _ts_full = _pd_tmp.to_datetime(cohort[temporal_date_col], errors="coerce")
+                _n_train = int((_ts_full < _pd_tmp.Timestamp(temporal_cutoff)).sum())
+                _n_test  = int((_ts_full >= _pd_tmp.Timestamp(temporal_cutoff)).sum())
+                st.caption(f"Treino: {_n_train:,} · Teste: {_n_test:,}")
+            except Exception:
+                pass
+            n_folds = 1
+            holdout_size = 0.20
+
+    with b2:
+        st.markdown("**Balanceamento de Classes**")
+        balancing = st.radio(
+            "Balanceamento",
+            ["Nenhum", "Class Weight", "SMOTE (oversample)", "SMOTE + Undersampling"],
+            index=1,
+            label_visibility="collapsed",
+            help=(
+                "**Nenhum**: sem ajuste. "
+                "**Class Weight**: penaliza erros na classe minoritária via class_weight='balanced'. "
+                "**SMOTE (oversample)**: gera amostras sintéticas da classe minoritária. "
+                "**SMOTE + Undersampling**: combina SMOTE com remoção de exemplos (SMOTETomek)."
+            ),
+        )
+        _bal_map = {
+            "Nenhum": "none",
+            "Class Weight": "class_weight",
+            "SMOTE (oversample)": "smote_over",
+            "SMOTE + Undersampling": "smote_under",
+        }
+        balancing_key = _bal_map[balancing]
+
+    with b3:
+        st.markdown("**Estratégia de Hiperparâmetros**")
+        hpo_mode = st.radio(
+            "HPO",
+            ["Optuna (automático)", "Random Search", "Grid Search", "Manual"],
+            index=0,
+            label_visibility="collapsed",
+            help=(
+                "**Optuna**: otimização bayesiana automática (melhor custo-benefício). "
+                "**Random Search**: amostragem aleatória do espaço (rápido). "
+                "**Grid Search**: busca exaustiva em grade pré-definida. "
+                "**Manual**: defina os parâmetros abaixo."
+            ),
+        )
+        if hpo_mode == "Random Search":
+            n_iter = st.slider("Iterações (n_iter)", 5, 100, 10, 5)
+            n_trials = 5
+        elif hpo_mode == "Optuna (automático)":
+            n_trials = st.slider("Tentativas (trials)", 5, 200, 5, 5)
+            n_iter = 10
+        else:
+            n_iter = 10
+            n_trials = 5
+
+    # ── Hiperparâmetros manuais (só quando Manual selecionado) ────────────────
+    params_per_algo: dict = {a: {} for a in algos}
+    if hpo_mode == "Manual":
+        st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+        st.markdown("**Hiperparâmetros**")
+        _pcols = st.columns(max(len(algos), 1))
+        for _i, (_algo, _lbl) in enumerate(zip(algos, algo_labels)):
+            with _pcols[_i]:
+                if len(algos) > 1:
+                    st.caption(f"**{_lbl}**")
+                _p: dict = {}
+                if _algo in ("lgbm", "xgb", "rf"):
+                    _p["n_estimators"] = st.slider(
+                        "n_estimators", 50, 1000, 300, 50, key=f"ne_{_algo}")
+                if _algo in ("lgbm", "xgb"):
+                    _p["learning_rate"] = st.select_slider(
+                        "learning_rate",
+                        [0.005, 0.01, 0.02, 0.05, 0.1, 0.2], value=0.05,
+                        key=f"lr_{_algo}")
+                if _algo in ("lgbm", "xgb", "rf"):
+                    _p["max_depth"] = st.slider(
+                        "max_depth (−1 = sem limite)", -1, 15, -1, key=f"md_{_algo}")
+                if _algo == "catboost":
+                    _p["iterations"] = st.slider(
+                        "iterations", 50, 1000, 300, 50, key=f"it_{_algo}")
+                    _p["learning_rate"] = st.select_slider(
+                        "learning_rate",
+                        [0.005, 0.01, 0.02, 0.05, 0.1, 0.2], value=0.05,
+                        key=f"lr_{_algo}")
+                    _p["depth"] = st.slider(
+                        "depth", 2, 10, 6, key=f"dep_{_algo}")
+                if _algo == "logreg":
+                    _p["C"] = st.select_slider(
+                        "C (regularização)",
+                        [0.001, 0.01, 0.1, 1.0, 10.0], value=1.0,
+                        key=f"c_{_algo}")
+                if _algo == "mlp":
+                    _hl = st.select_slider(
+                        "Camadas ocultas",
+                        ["64", "128", "64,32", "128,64", "100,50,25"],
+                        value="64,32", key=f"hl_{_algo}")
+                    _p["hidden_layer_sizes"] = tuple(int(x) for x in _hl.split(","))
+                    _p["max_iter"] = st.slider(
+                        "Épocas (max_iter)", 50, 500, 200, 50, key=f"ep_{_algo}")
+                    _p["learning_rate_init"] = st.select_slider(
+                        "learning_rate_init",
+                        [1e-4, 5e-4, 1e-3, 5e-3, 1e-2], value=1e-3,
+                        key=f"lri_{_algo}")
+                params_per_algo[_algo] = _p
+
+    if st.button("Confirmar Configuração", type="primary"):
+        ss["model_config"] = {
+            "algos": algos,
+            "algo_labels": algo_labels,
+            "algo": algos[0],
+            "algo_label": algo_labels[0],
+            "val_strategy": val_strategy,
+            "n_folds": n_folds,
+            "holdout_size": holdout_size,
+            "temporal_date_col": temporal_date_col,
+            "temporal_cutoff": str(temporal_cutoff) if temporal_cutoff else None,
+            "balancing": balancing_key,
+            "balancing_label": balancing,
+            "hpo_mode": hpo_mode,
+            "n_iter": n_iter,
+            "n_trials": n_trials,
+            "params": params_per_algo.get(algos[0], {}),
+            "params_per_algo": params_per_algo,
+        }
+        ss["model_results"] = None
+        ss["calib_results"] = None
+        ss["comparison_results"] = []
+        st.rerun()
+    st.stop()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ETAPA 7 — TREINAR
+# ═════════════════════════════════════════════════════════════════════════════
+cfg = ss["model_config"]
+algos = cfg.get("algos", [cfg["algo"]])
+algo_labels = cfg.get("algo_labels", [cfg["algo_label"]])
+algo = algos[0]
+algo_label = algo_labels[0]
+_algos_label = " · ".join(algo_labels)
+val_strategy = cfg["val_strategy"]
+n_folds = cfg["n_folds"]
+holdout_size = cfg["holdout_size"]
+temporal_date_col = cfg.get("temporal_date_col")
+temporal_cutoff = cfg.get("temporal_cutoff")
+balancing = cfg.get("balancing", "none")
+hpo_mode = cfg["hpo_mode"]
+n_iter = cfg.get("n_iter", 30)
+n_trials = cfg.get("n_trials", 5)
+params_per_algo = cfg.get("params_per_algo", {algo: cfg.get("params", {})})
+selected_features = ss["feature_config"]["selected_features"]
+treatment = ss.get("treatment_config")
+
+if not ss["model_results"]:
+    step_title(6, "Treinar Modelo",
+               "Execute o treinamento com a configuração selecionada.")
+    bal = builder.class_balance(cohort)
+    total_n = bal["total"]
+    if val_strategy == "Validação cruzada (k-fold)":
+        _val_tag_label = f"{n_folds}-fold CV"
+    elif val_strategy == "Validação Temporal":
+        _val_tag_label = f"Temporal · corte {temporal_cutoff}"
+    else:
+        _val_tag_label = f"Holdout {holdout_size:.0%}"
+    info_box(
+        f"<b>{_algos_label}</b> · {_val_tag_label} · <b>{len(selected_features)}</b> features · "
+        f"<b>{total_n:,}</b> registros"
+        + (f" · {cfg.get('balancing_label', '')}" if balancing != "none" else "")
+        + (f" · Optuna {n_trials} trials" if hpo_mode == "Optuna (automático)" else "")
+        + (f" · Random Search {n_iter} iter" if hpo_mode == "Random Search" else "")
+        + (" · Grid Search" if hpo_mode == "Grid Search" else "")
+    )
+
+    X_model = X[selected_features]
+    sample_n = total_n
+
+    _LC_COLORS = [
+        "#223886", "#9ec83b", "#e11d48", "#7c3aed",
+        "#d97706", "#0891b2", "#be185d", "#059669",
+    ]
+
+    _LC_TITLES = {
+        "epoch":    "Treinamento da rede neural — ROC-AUC por época",
+        "boosting": "Aprendizado do boosting — ROC-AUC por árvore adicionada",
+        "volume":   "Curva de Aprendizado — ROC-AUC por volume de dados",
+    }
+
+    def _lc_fig(lc_data: dict):
+        """lc_data = {label: {steps, prog, val, train, labels, mode, x_label}}.
+
+        Eixo X nativo (época / árvore / volume) quando há um único tipo de
+        algoritmo; progresso normalizado (%) quando se comparam tipos distintos.
+        """
+        import plotly.graph_objects as _go
+
+        active = {k: v for k, v in lc_data.items() if v.get("val")}
+        modes = {v["mode"] for v in active.values()}
+
+        if len(modes) == 1:
+            _x_key = "steps"
+            _only = next(iter(modes))
+            _x_title = next(iter(active.values()))["x_label"]
+            _title = _LC_TITLES[_only]
+        else:
+            _x_key = "prog"
+            _x_title = "Progresso do treino (%)"
+            _title = "Curva de Aprendizado — ROC-AUC ao longo do treino"
+
+        all_vals = []
+        for d in active.values():
+            all_vals.extend(d.get("val", []))
+            all_vals.extend(d.get("train", []))
+        if all_vals:
+            _ymin = max(0.0, min(all_vals) - 0.05)
+            _ymax = min(1.01, max(all_vals) + 0.03)
+        else:
+            _ymin, _ymax = 0.4, 1.0
+
+        fig = _go.Figure()
+        for i, (lbl, d) in enumerate(active.items()):
+            color = _LC_COLORS[i % len(_LC_COLORS)]
+            _x = d[_x_key]
+            _cd = d.get("labels")
+            fig.add_trace(_go.Scatter(
+                x=_x, y=d["val"], mode="lines+markers",
+                name="Validação",
+                legendgroup=lbl,
+                legendgrouptitle=dict(text=lbl, font=dict(size=11, color="#374151")),
+                line=dict(color=color, width=2.5), marker=dict(size=7),
+                customdata=_cd,
+                hovertemplate=(f"<b>{lbl}</b><br>%{{customdata}}<br>"
+                               "Val AUC %{y:.3f}<extra></extra>") if _cd else None,
+            ))
+            if d.get("train"):
+                fig.add_trace(_go.Scatter(
+                    x=_x, y=d["train"], mode="lines+markers",
+                    name="Treino",
+                    legendgroup=lbl,
+                    line=dict(color=color, width=1.5, dash="dot"),
+                    marker=dict(size=5, symbol="circle-open"),
+                    customdata=_cd,
+                    hovertemplate=(f"<b>{lbl}</b><br>%{{customdata}}<br>"
+                                   "Treino AUC %{y:.3f}<extra></extra>") if _cd else None,
+                ))
+        fig.update_layout(
+            title=_title,
+            xaxis_title=_x_title,
+            yaxis=dict(
+                title="ROC-AUC",
+                range=[_ymin, _ymax],
+                gridcolor="rgba(0,0,0,0.07)",
+                tickformat=".2f",
+            ),
+            xaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.07)", zeroline=False),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            height=450,
+            legend=dict(
+                orientation="v",
+                yanchor="middle", y=0.5,
+                xanchor="left", x=1.02,
+                groupclick="toggleitem",
+                tracegroupgap=12,
+                font=dict(size=12),
+            ),
+            margin=dict(t=50, b=40, l=70, r=180),
+            font=dict(size=13),
+            hovermode="closest",
+        )
+        return fig
+
+    # ── Visualização estrutural: a rede / as árvores aprendendo ao vivo ───────
+    _TREE_DRAW_DEPTH = 4
+
+    def _net_fig(state):
+        """Diagrama da rede neural: neurônios, pesos (azul +, vermelho −) e as
+        arestas onde o backpropagation mais ajustou nesta época (douradas)."""
+        import plotly.graph_objects as _go
+        sizes = state["disp_sizes"]; real = state["real_sizes"]
+        W = state["weights"]; dW = state.get("dW", [])
+        wmax = state.get("wmax", 1.0) or 1.0
+        dmax = state.get("dmax", 1.0) or 1.0
+        L = len(sizes)
+
+        pos = []
+        for li, c in enumerate(sizes):
+            pos.append([(float(li), (i - (c - 1) / 2.0)) for i in range(c)])
+
+        thr = 0.18
+        dthr = 0.6 * dmax
+        posx, posy, negx, negy, pulx, puly = [], [], [], [], [], []
+        for li, w in enumerate(W):
+            dw = dW[li] if li < len(dW) else None
+            for i, row in enumerate(w):
+                x0, y0 = pos[li][i]
+                for jj, wv in enumerate(row):
+                    x1, y1 = pos[li + 1][jj]
+                    if dw is not None and dmax > 1e-6 and dw[i][jj] >= dthr:
+                        pulx += [x0, x1, None]; puly += [y0, y1, None]
+                    if abs(wv) / wmax < thr:
+                        continue
+                    if wv >= 0:
+                        posx += [x0, x1, None]; posy += [y0, y1, None]
+                    else:
+                        negx += [x0, x1, None]; negy += [y0, y1, None]
+
+        fig = _go.Figure()
+        fig.add_trace(_go.Scatter(x=negx, y=negy, mode="lines", name="peso −",
+            line=dict(color="rgba(225,29,72,0.30)", width=1), hoverinfo="skip"))
+        fig.add_trace(_go.Scatter(x=posx, y=posy, mode="lines", name="peso +",
+            line=dict(color="rgba(26,86,219,0.35)", width=1), hoverinfo="skip"))
+        fig.add_trace(_go.Scatter(x=pulx, y=puly, mode="lines", name="backprop (Δ)",
+            line=dict(color="rgba(217,119,6,0.95)", width=2), hoverinfo="skip"))
+        for li, c in enumerate(sizes):
+            fig.add_trace(_go.Scatter(
+                x=[p[0] for p in pos[li]], y=[p[1] for p in pos[li]], mode="markers",
+                marker=dict(size=13, color="#1f2937", line=dict(color="#fff", width=1.5)),
+                hoverinfo="skip", showlegend=False))
+
+        for i, nm in enumerate(state.get("in_names", [])):
+            x0, y0 = pos[0][i]
+            fig.add_annotation(x=x0 - 0.07, y=y0, text=str(nm)[:16], showarrow=False,
+                xanchor="right", font=dict(size=10, color="#6b7280"))
+        ox, oy = pos[-1][0]
+        fig.add_annotation(x=ox + 0.07, y=oy, text="saída", showarrow=False,
+            xanchor="left", font=dict(size=10, color="#6b7280"))
+
+        ytop = max((c - 1) / 2.0 for c in sizes) + 0.9
+
+        def _lname(li):
+            base = "Entrada" if li == 0 else ("Saída" if li == L - 1 else f"Oculta ({real[li]})")
+            if sizes[li] < real[li]:
+                base += f"<br><span style='font-size:9px;color:#9ca3af'>amostra de {sizes[li]}</span>"
+            return base
+        for li in range(L):
+            fig.add_annotation(x=float(li), y=ytop, text=_lname(li), showarrow=False,
+                font=dict(size=11, color="#374151"))
+        for li, u in enumerate(state.get("updates", [])):
+            fig.add_annotation(x=li + 0.5, y=-ytop, text=f"Δ {u:.2f}", showarrow=False,
+                font=dict(size=10, color="#d97706"))
+
+        fig.update_layout(
+            title=(f"Rede neural aprendendo — época {state.get('epoch', '')} · "
+                   "arestas douradas = onde o backprop mais ajustou os pesos"),
+            xaxis=dict(visible=False, range=[-0.85, (L - 1) + 0.85]),
+            yaxis=dict(visible=False, range=[-ytop - 0.6, ytop + 0.6]),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            height=440, margin=dict(t=48, b=30, l=20, r=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0,
+                        font=dict(size=11)),
+        )
+        return fig
+
+    def _tree_fig(state):
+        """Estrutura da árvore recém-adicionada pelo boosting (nós de decisão azuis,
+        folhas verdes). Cada árvore corrige o erro residual das anteriores."""
+        import plotly.graph_objects as _go
+        nodes = state.get("nodes", [])
+        fig = _go.Figure()
+        if not nodes:
+            fig.add_annotation(text="Estrutura da árvore indisponível para este round",
+                showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper",
+                font=dict(size=13, color="#9ca3af"))
+            fig.update_layout(height=440, paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(visible=False),
+                yaxis=dict(visible=False))
+            return fig
+
+        byid = {n["id"]: n for n in nodes}
+
+        def path_x(n):
+            bits, cur = [], n
+            while cur["parent"] is not None and cur["parent"] in byid:
+                bits.append(0 if cur["side"] == "L" else 1)
+                cur = byid[cur["parent"]]
+            bits = bits[::-1]
+            x = sum(b / (2 ** (k + 1)) for k, b in enumerate(bits))
+            return x + 1.0 / (2 ** (len(bits) + 1))
+
+        draw = [n for n in nodes if n["depth"] <= _TREE_DRAW_DEPTH]
+        kids: dict = {}
+        for n in nodes:
+            kids.setdefault(n["parent"], []).append(n)
+        xy = {n["id"]: (path_x(n), -float(n["depth"])) for n in draw}
+
+        ex, ey = [], []
+        for n in draw:
+            p = n["parent"]
+            if p is not None and p in xy:
+                x0, y0 = xy[p]; x1, y1 = xy[n["id"]]
+                ex += [x0, x1, None]; ey += [y0, y1, None]
+        fig.add_trace(_go.Scatter(x=ex, y=ey, mode="lines", showlegend=False,
+            line=dict(color="rgba(100,116,139,0.6)", width=1.3), hoverinfo="skip"))
+
+        for is_leaf, color, nm in [(False, "#1a56db", "decisão"), (True, "#059669", "folha")]:
+            sub = [n for n in draw if bool(n["is_leaf"]) == is_leaf]
+            if not sub:
+                continue
+            xs = [xy[n["id"]][0] for n in sub]
+            ys = [xy[n["id"]][1] for n in sub]
+            hov, txt = [], []
+            for n in sub:
+                lbl = n["label"]
+                if (not n["is_leaf"]) and n["depth"] == _TREE_DRAW_DEPTH and kids.get(n["id"]):
+                    lbl = lbl + " …"
+                hov.append(lbl)
+                txt.append(lbl if (not is_leaf and n["depth"] <= 1) else "")
+            fig.add_trace(_go.Scatter(x=xs, y=ys, mode="markers+text", name=nm,
+                marker=dict(size=15, color=color, line=dict(color="#fff", width=1.5)),
+                text=txt, textposition="top center", textfont=dict(size=10, color="#374151"),
+                hovertext=hov, hoverinfo="text"))
+
+        fig.update_layout(
+            title=(f"Boosting ({state.get('lib', '')}) — árvore {state.get('round', '')}/"
+                   f"{state.get('total', '')} recém-adicionada · cada árvore corrige o erro das anteriores"),
+            xaxis=dict(visible=False, range=[-0.05, 1.05]),
+            yaxis=dict(visible=False, range=[-_TREE_DRAW_DEPTH - 0.6, 0.8]),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            height=440, margin=dict(t=48, b=20, l=20, r=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0,
+                        font=dict(size=11)),
+        )
+        return fig
+
+    def _forward_fig(state):
+        """Forward pass: um exemplo real atravessando a rede já treinada. Os neurônios
+        acendem conforme o sinal avança (camada ativa colorida pela ativação), as
+        arestas que carregam o sinal aparecem em dourado e o neurônio que mais dispara
+        em cada camada ganha um anel. A saída mostra a probabilidade prevista."""
+        import plotly.graph_objects as _go
+        sizes = state["caps"]; real = state["real_sizes"]; L = len(sizes)
+        acts = state["activations"]; W = state["weights"]
+        active = state.get("active_layer", L - 1)
+        pos = [[(float(li), (i - (c - 1) / 2.0)) for i in range(c)] for li, c in enumerate(sizes)]
+
+        fig = _go.Figure()
+        # 1) todas as conexões, bem fracas (a estrutura ao fundo)
+        gx, gy = [], []
+        for li, w in enumerate(W):
+            for i, row in enumerate(w):
+                x0, y0 = pos[li][i]
+                for jj in range(len(row)):
+                    x1, y1 = pos[li + 1][jj]
+                    gx += [x0, x1, None]; gy += [y0, y1, None]
+        fig.add_trace(_go.Scatter(x=gx, y=gy, mode="lines",
+            line=dict(color="rgba(0,0,0,0.05)", width=0.5), hoverinfo="skip", showlegend=False))
+
+        # 2) o sinal que chega à camada ativa: arestas |a_prev * peso| mais fortes
+        if 1 <= active < len(acts):
+            a_prev = acts[active - 1]; w = W[active - 1]
+            contrib = []
+            for i, row in enumerate(w):
+                ai = a_prev[i] if i < len(a_prev) else 0.0
+                for jj, wv in enumerate(row):
+                    contrib.append((abs(ai * wv), i, jj))
+            cmax = max((m for m, _, _ in contrib), default=0.0) or 1e-9
+            sx, sy = [], []
+            for mag, i, jj in contrib:
+                if mag / cmax < 0.25:
+                    continue
+                x0, y0 = pos[active - 1][i]; x1, y1 = pos[active][jj]
+                sx += [x0, x1, None]; sy += [y0, y1, None]
+            fig.add_trace(_go.Scatter(x=sx, y=sy, mode="lines", name="sinal",
+                line=dict(color="rgba(217,119,6,0.85)", width=1.8), hoverinfo="skip", showlegend=False))
+
+        # 3) neurônios: já percorridos acendem pela ativação; os demais ficam apagados.
+        #    O mais ativo de cada camada acesa ganha um anel destacado.
+        hx, hy = [], []  # halos do neurônio mais ativo por camada
+        for li, c in enumerate(sizes):
+            av = acts[li] if li < len(acts) else [0.0] * c
+            amax = max((abs(v) for v in av), default=0.0) or 1e-9
+            xs = [pos[li][i][0] for i in range(c)]
+            ys = [pos[li][i][1] for i in range(c)]
+            if li <= active:
+                inten = [min(1.0, abs(av[i]) / amax) for i in range(c)]
+                fig.add_trace(_go.Scatter(x=xs, y=ys, mode="markers",
+                    marker=dict(size=[10 + 16 * t for t in inten], color=inten,
+                                colorscale="YlOrRd", cmin=0, cmax=1, showscale=False,
+                                line=dict(color="#fff", width=1)),
+                    hovertext=[f"ativação {av[i]:.2f}" for i in range(c)], hoverinfo="text",
+                    showlegend=False))
+                _top = max(range(c), key=lambda k: abs(av[k])) if c else 0
+                hx.append(pos[li][_top][0]); hy.append(pos[li][_top][1])
+            else:
+                fig.add_trace(_go.Scatter(x=xs, y=ys, mode="markers",
+                    marker=dict(size=9, color="rgba(150,150,150,0.30)",
+                                line=dict(color="#fff", width=1)),
+                    hoverinfo="skip", showlegend=False))
+        if hx:
+            fig.add_trace(_go.Scatter(x=hx, y=hy, mode="markers",
+                marker=dict(size=30, color="rgba(0,0,0,0)",
+                            line=dict(color="#111827", width=2)),
+                hoverinfo="skip", showlegend=False))
+
+        # Rótulos de entrada: valor real do paciente quando disponível, senão z-score (sufixo z)
+        in_names = state.get("in_names", []); in_vals = state.get("in_values", [])
+        in_real = state.get("in_real", [])
+
+        def _fmt_in(v):
+            if isinstance(v, bool):
+                return "sim" if v else "não"
+            if isinstance(v, (int, float)):
+                return f"{v:g}"
+            return str(v)[:10]
+        for i, nm in enumerate(in_names):
+            x0, y0 = pos[0][i]
+            rv = in_real[i] if i < len(in_real) else None
+            if rv is not None and not (isinstance(rv, float) and rv != rv):  # ignora NaN
+                txt = f"{str(nm)[:12]} = {_fmt_in(rv)}"
+            elif i < len(in_vals):
+                txt = f"{str(nm)[:12]} = {in_vals[i]:+.1f}z"
+            else:
+                txt = str(nm)[:12]
+            fig.add_annotation(x=x0 - 0.07, y=y0, text=txt, showarrow=False, xanchor="right",
+                font=dict(size=9, color="#6b7280"))
+
+        # Nó de saída: acende só quando o sinal chega (verde no acerto, vermelho no erro)
+        ox, oy = pos[-1][0]
+        prob = state.get("pred", 0.0); yt = state.get("y_true")
+        reached = active >= L - 1
+        hit = (yt is not None and int(prob >= 0.5) == yt)
+        if reached:
+            out_color = "#059669" if hit else ("#e11d48" if yt is not None else "#1f2937")
+        else:
+            out_color = "rgba(150,150,150,0.30)"
+        fig.add_trace(_go.Scatter(x=[ox], y=[oy], mode="markers",
+            marker=dict(size=26, color=out_color, line=dict(color="#fff", width=2)),
+            hoverinfo="skip", showlegend=False))
+        if reached:
+            _mark = "✓ acertou" if hit else ("✗ errou" if yt is not None else "")
+            fig.add_annotation(x=ox + 0.10, y=oy,
+                text=f"<b>P = {prob:.2f}</b><br><span style='font-size:9px'>{_mark}</span>",
+                showarrow=False, xanchor="left", align="left", font=dict(size=12, color="#111827"))
+
+        # Rótulos de camada, com aviso de amostragem quando exibimos menos neurônios
+        def _lname(li):
+            if li == 0:
+                base = "Entrada"
+            elif li == L - 1:
+                base = "Saída"
+            else:
+                base = f"Oculta ({real[li]})"
+            if sizes[li] < real[li]:
+                base += f"<br><span style='font-size:9px;color:#9ca3af'>amostra de {sizes[li]}</span>"
+            return base
+        ytop = max((c - 1) / 2.0 for c in sizes) + 1.0
+        for li in range(L):
+            fig.add_annotation(x=float(li), y=ytop, text=_lname(li), showarrow=False,
+                font=dict(size=11, color="#374151"))
+
+        # Legenda didática (o que cada cor/forma significa) — duas linhas p/ não cortar
+        fig.add_annotation(
+            x=0.0, y=-ytop - 0.45, xref="x", yref="y", xanchor="left", showarrow=False,
+            align="left", font=dict(size=10, color="#6b7280"),
+            text=("● cor/tamanho = ativação do neurônio (ReLU) &nbsp;·&nbsp; "
+                  "<span style='color:#d97706'>—</span> dourado = sinal passando<br>"
+                  "○ anel = neurônio mais ativo da camada &nbsp;·&nbsp; "
+                  "entrada = valor do paciente (sufixo <i>z</i> = padronizado)"))
+
+        cls = "positivo" if yt == 1 else "negativo"
+        fig.update_layout(
+            title=(f"Dado atravessando a rede — exemplo {state.get('sample', '')}/"
+                   f"{state.get('n_samples', '')} · classe real: <b>{cls}</b> · "
+                   f"camada ativa: {(_lname(active).split('<')[0])}"),
+            xaxis=dict(visible=False, range=[-0.98, (L - 1) + 1.05]),
+            yaxis=dict(visible=False, range=[-ytop - 1.0, ytop + 0.6]),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            height=480, margin=dict(t=50, b=44, l=70, r=60), showlegend=False)
+        return fig
+
+    def _resid_fig(state):
+        """Boosting: o resíduo (y − p) de cada paciente encolhendo a cada árvore.
+        Cada ponto é um paciente; a linha cinza vai da previsão p até o alvo (0 ou 1)
+        e é o resíduo. Classe 1 migra para a direita, classe 0 para a esquerda."""
+        import plotly.graph_objects as _go
+        probs = state.get("probs", []); ys = state.get("y", [])
+        n = len(probs)
+        idx1 = [k for k in range(n) if ys[k] == 1]
+        idx0 = [k for k in range(n) if ys[k] == 0]
+        ymap = {}
+        for r, k in enumerate(idx1):
+            ymap[k] = 0.18 + 0.80 * (r / max(len(idx1) - 1, 1))
+        for r, k in enumerate(idx0):
+            ymap[k] = -0.18 - 0.80 * (r / max(len(idx0) - 1, 1))
+
+        fig = _go.Figure()
+        # resíduo de cada paciente: linha de p até o alvo (0 ou 1)
+        segx, segy = [], []
+        for k in range(n):
+            target = 1.0 if ys[k] == 1 else 0.0
+            segx += [probs[k], target, None]; segy += [ymap[k], ymap[k], None]
+        fig.add_trace(_go.Scatter(x=segx, y=segy, mode="lines", hoverinfo="skip",
+            showlegend=False, line=dict(color="rgba(120,120,120,0.30)", width=1)))
+        # limiar de decisão
+        fig.add_shape(type="line", x0=0.5, x1=0.5, y0=-1.05, y1=1.05,
+            line=dict(color="rgba(0,0,0,0.25)", width=1, dash="dot"))
+        # pontos por classe (posição estável; só o x muda entre rounds)
+        for cls, col, nm, band in [(1, "#e11d48", "classe 1 (evento)", idx1),
+                                   (0, "#1a56db", "classe 0", idx0)]:
+            fig.add_trace(_go.Scatter(
+                x=[probs[k] for k in band], y=[ymap[k] for k in band],
+                mode="markers", name=nm,
+                marker=dict(size=8, color=col, line=dict(color="#fff", width=0.5)),
+                hovertext=[f"p = {probs[k]:.2f} · resíduo = "
+                           f"{abs((1 if ys[k] == 1 else 0) - probs[k]):.2f}" for k in band],
+                hoverinfo="text"))
+        fig.add_annotation(x=1.0, y=1.02, text="alvo da classe 1 →", showarrow=False,
+            xanchor="right", font=dict(size=10, color="#e11d48"))
+        fig.add_annotation(x=0.0, y=-1.02, text="← alvo da classe 0", showarrow=False,
+            xanchor="left", font=dict(size=10, color="#1a56db"))
+        R = state.get("mean_abs", 0.0)
+        fig.add_annotation(
+            x=0.5, y=-1.28, xref="x", yref="y", showarrow=False,
+            font=dict(size=10, color="#6b7280"),
+            text=("a linha cinza de cada paciente é o resíduo (distância até o alvo); "
+                  "cada árvore nova encolhe esse resíduo"))
+        fig.update_layout(
+            title=(f"Boosting ({state.get('lib','')}) — árvore {state.get('round','')}/"
+                   f"{state.get('total','')} · resíduo médio |y − p| = {R:.3f}"),
+            xaxis=dict(title="previsão p (probabilidade do evento)", range=[-0.05, 1.05],
+                       tickformat=".1f", gridcolor="rgba(0,0,0,0.06)", zeroline=False),
+            yaxis=dict(visible=False, range=[-1.45, 1.2]),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            height=470, margin=dict(t=50, b=30, l=20, r=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0,
+                        font=dict(size=11)))
+        return fig
+
+    _struct_ph = st.empty()
+    _lc_chart_ph = st.empty()
+    _lc_status_ph = st.empty()
+    _struct_ph.caption("A estrutura do modelo aprendendo (neurônios ou árvores) aparecerá aqui durante o treinamento.")
+    _lc_chart_ph.caption("A curva de aprendizado será exibida durante o treinamento.")
+
+    _anim_speed = st.select_slider(
+        "Velocidade da animação do aprendizado",
+        options=["Rápida", "Normal", "Lenta (didática)"],
+        value="Normal",
+        help="Controla apenas a velocidade da animação (neurônios/árvores e curva). "
+             "Não altera o modelo nem as métricas — só dá tempo de acompanhar o aprendizado "
+             "sem precisar aumentar a amostra.",
+    )
+    _anim_delay = {"Rápida": 0.0, "Normal": 0.10, "Lenta (didática)": 0.28}[_anim_speed]
+
+    if "mlp" in algos:
+        _fwd_n = st.slider(
+            "Exemplos no forward pass (rede neural)", 2, 8, 4,
+            help="Quantos pacientes reais atravessam a rede na animação do forward pass.")
+    else:
+        _fwd_n = 4
+
+    _hpo_prefix = {
+        "Optuna (automático)": "Optuna + ",
+        "Random Search": "Random Search + ",
+        "Grid Search": "Grid Search + ",
+    }.get(hpo_mode, "")
+    btn_label = f"{_hpo_prefix}Treinar {_algos_label} · {_val_tag_label}"
+
+    _train_btn_ph = st.empty()
+    _train_clicked = _train_btn_ph.button(btn_label, type="primary", key="train_main_btn")
+
+    if _train_clicked:
+        # Replace button with strategy summary while training runs
+        _train_btn_ph.markdown(
+            f'<div class="ds-info-box" style="font-size:0.82rem;padding:8px 14px;">'
+            f'⏳ &nbsp;<b>Treinando:</b> &nbsp;{_algos_label} · {_val_tag_label}'
+            + (f' · Optuna {n_trials} trials' if hpo_mode == "Optuna (automático)" else "")
+            + (f' · Random Search {n_iter} iter' if hpo_mode == "Random Search" else "")
+            + (' · Grid Search' if hpo_mode == "Grid Search" else "")
+            + f'</div>',
+            unsafe_allow_html=True,
+        )
+        try:
+            import time as _time
+            from sklearn.model_selection import train_test_split
+            from sklearn.metrics import roc_auc_score as _roc_auc
+
+            X_train = X_model
+            y_train = y
+
+            # ── Curva de aprendizado — perspectiva por família de algoritmo ───
+            #   rede neural → por época · boosting → por árvore · demais → volume
+            # Import defensivo: se a visualização não estiver disponível (ex.: deploy
+            # desencontrado), o treino segue normalmente, só sem a animação ao vivo.
+            try:
+                from core.models.pipeline import (
+                    training_curve as _training_curve,
+                    BOOSTING_ALGORITHMS as _BOOST, NEURAL_ALGORITHMS as _NEURAL,
+                )
+            except Exception:
+                _training_curve = None
+                _BOOST, _NEURAL = set(), set()
+                _struct_ph.info(
+                    "Visualização do aprendizado ao vivo indisponível nesta versão do app "
+                    "(o treinamento continua normalmente)."
+                )
+
+            def _algo_mode(a):
+                if a in _NEURAL:
+                    return "epoch", "Época"
+                if a in _BOOST:
+                    return "boosting", "Árvores (rounds de boosting)"
+                return "volume", "Registros de treinamento"
+
+            _lc_data: dict = {}
+            for _a, _l in zip(algos, algo_labels):
+                _m, _xl = _algo_mode(_a)
+                _lc_data[_l] = {"steps": [], "prog": [], "val": [], "train": [],
+                                "labels": [], "mode": _m, "x_label": _xl}
+
+            try:
+                _X_lc, _X_hold, _y_lc, _y_hold = train_test_split(
+                    X_train, y_train, test_size=0.2, stratify=y_train, random_state=42,
+                )
+            except Exception:
+                _X_lc, _X_hold = X_train, X_train
+                _y_lc, _y_hold = y_train, y_train
+
+            # ── Per-model debug containers (criados antes dos loops) ──────────
+            _mstatus: dict = {}
+            _mdetail: dict = {}
+            _mprog: dict = {}
+
+            # Helpers: status com ícone MS + detalhe muted
+            def _ms_st(ph, icon: str, text: str) -> None:
+                ph.markdown(
+                    f'<span class="ms" style="font-size:13px;vertical-align:middle;'
+                    f'color:#6b7280">{icon}</span>'
+                    f'&nbsp;<span style="font-size:0.85rem;color:#374151">{text}</span>',
+                    unsafe_allow_html=True,
+                )
+
+            def _ms_dt(ph, text: str) -> None:
+                ph.markdown(
+                    f'<span style="font-size:0.78rem;color:#9ca3af;padding-left:20px">'
+                    f'{text}</span>',
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("**Progresso por modelo:**")
+            for _lbl in algo_labels:
+                _nc1, _nc2 = st.columns([1, 4])
+                _nc1.markdown(f"**{_lbl}**")
+                with _nc2:
+                    _mstatus[_lbl] = st.empty()
+                    _mprog[_lbl] = st.empty()
+                    _mdetail[_lbl] = st.empty()
+                _ms_st(_mstatus[_lbl], "hourglass_empty", "Aguardando…")
+
+            for _lc_algo, _lc_lbl in zip(algos, algo_labels):
+                _store = _lc_data[_lc_lbl]
+                # Reinicia o painel estrutural a cada modelo: evita que a rede/árvore
+                # de um modelo anterior fique na tela, e explica o modo volume.
+                if _store["mode"] == "volume":
+                    _struct_ph.caption(
+                        f"**{_lc_lbl}** — Random Forest, Logistic e TabPFN não têm estrutura "
+                        "sequencial para animar. Acompanhe a curva de aprendizado por volume "
+                        "de dados abaixo.")
+                else:
+                    _struct_ph.caption(f"Preparando visualização de **{_lc_lbl}**…")
+                _start_msg = {
+                    "epoch":    "Treinando rede neural — época a época…",
+                    "boosting": "Boosting — resíduo encolhendo a cada árvore…",
+                    "volume":   "Calculando curva de aprendizado…",
+                }[_store["mode"]]
+                _ms_st(_mstatus[_lc_lbl], "bar_chart", _start_msg)
+                _mprog[_lc_lbl].progress(0.0, text=f"Curva de aprendizado — {_lc_lbl}…")
+
+                def _lc_cb(done, total, xval, label, ta, va, state=None,
+                           _st=_store, _lbl=_lc_lbl,
+                           _pb=_mprog[_lc_lbl], _dph=_mdetail[_lc_lbl],
+                           _delay=_anim_delay):
+                    _st["steps"].append(xval)
+                    _st["prog"].append(100.0 * done / max(total, 1))
+                    _st["train"].append(ta)
+                    _st["val"].append(va)
+                    _st["labels"].append(label)
+                    # Estrutura aprendendo: rede (neurônios) ou resíduo do boosting
+                    if state is not None:
+                        try:
+                            _k = state.get("kind")
+                            if _k == "net":
+                                _struct_ph.plotly_chart(_net_fig(state), use_container_width=True)
+                            elif _k == "resid":
+                                _struct_ph.plotly_chart(_resid_fig(state), use_container_width=True)
+                            elif _k == "tree":
+                                _struct_ph.plotly_chart(_tree_fig(state), use_container_width=True)
+                        except Exception:
+                            pass
+                    _lc_chart_ph.plotly_chart(_lc_fig(_lc_data), use_container_width=True)
+                    _pb.progress(done / max(total, 1), text=f"{label} — Val AUC: {va:.3f}")
+                    _ms_dt(_dph, f"{label} — Val AUC: {va:.3f}")
+                    _lc_status_ph.caption(f"{_lbl} — {label} — Val AUC: {va:.3f}")
+                    if _delay:
+                        _time.sleep(_delay)  # ritmo da animação (não afeta o modelo)
+
+                # Animação secundária: rede → forward pass; boosting → árvores do comitê
+                def _extra_cb(done, total, state, _lbl=_lc_lbl, _delay=_anim_delay):
+                    try:
+                        _k = state.get("kind")
+                        if _k == "forward":
+                            _struct_ph.plotly_chart(_forward_fig(state), use_container_width=True)
+                            _msg = (f"dado atravessando a rede (exemplo "
+                                    f"{state.get('sample')}/{state.get('n_samples')})")
+                        elif _k == "tree":
+                            _struct_ph.plotly_chart(_tree_fig(state), use_container_width=True)
+                            _msg = (f"exemplo de árvore do comitê "
+                                    f"(árvore {state.get('round')}/{state.get('total')})")
+                        else:
+                            _msg = ""
+                        _ms_dt(_mdetail[_lc_lbl], _msg)
+                        _lc_status_ph.caption(f"{_lbl} — {_msg}")
+                    except Exception:
+                        pass
+                    _time.sleep(max(_delay, 0.12))  # animação secundária sempre acompanhável
+
+                if _training_curve is None:
+                    _ms_st(_mstatus[_lc_lbl], "check", "Treino seguindo (sem animação)")
+                    continue
+                try:
+                    _training_curve(
+                        _X_lc, _y_lc, _X_hold, _y_hold,
+                        algorithm=_lc_algo,
+                        params=dict(params_per_algo.get(_lc_algo, {})),
+                        treatment=treatment,
+                        progress_callback=_lc_cb,
+                        extra_callback=_extra_cb,
+                        forward_samples=_fwd_n,
+                    )
+                    if _store["mode"] == "epoch":
+                        _ms_st(_mstatus[_lc_lbl], "check",
+                               "Rede treinada + forward pass concluído")
+                    elif _store["mode"] == "boosting":
+                        _ms_st(_mstatus[_lc_lbl], "check",
+                               "Resíduo encolhido + árvores do comitê")
+                except Exception as _lc_err:
+                    _ms_dt(_mdetail[_lc_lbl], f"Curva indisponível — {_lc_err}")
+
+                _mprog[_lc_lbl].progress(1.0, text=f"Curva de aprendizado concluída — {_lc_lbl}")
+                _ms_st(_mstatus[_lc_lbl], "check", "Curva de aprendizado concluída")
+                _mdetail[_lc_lbl].empty()
+
+            # ── Loop por algoritmo: HPO + treino ──────────────────────────────
+            _hpo_folds = min(n_folds, 3) if val_strategy == "Validação cruzada (k-fold)" else 3
+            _all_results = []
+
+            import numpy as _np
+            from sklearn.metrics import (
+                roc_auc_score as _rauc, average_precision_score as _ap,
+                f1_score as _f1, precision_score as _prec,
+                recall_score as _rec, brier_score_loss as _brier,
+            )
+
+            for _algo, _algo_lbl in zip(algos, algo_labels):
+                try:
+                    _params = dict(params_per_algo.get(_algo, {}))
+
+                    # HPO
+                    if hpo_mode == "Optuna (automático)":
+                        _ms_st(_mstatus[_algo_lbl], "manage_search",
+                               "Optuna — buscando hiperparâmetros…")
+                        _mprog[_algo_lbl].progress(0.0, text=f"Optuna {_algo_lbl}: 0/{n_trials}…")
+                        _ph_detail = _mdetail[_algo_lbl]
+                        _pb = _mprog[_algo_lbl]
+                        def _opt_cb(done, total, best, _p=_pb, _l=_algo_lbl, _ph=_ph_detail,
+                                    _fms=_ms_dt):
+                            _p.progress(done / total,
+                                        text=f"Optuna {_l}: {done}/{total} — AUC {best:.4f}")
+                            _fms(_ph, f"Trial {done}/{total} — melhor AUC: {best:.4f}")
+                        _params = optimize_hyperparams(
+                            X_train, y_train, algorithm=_algo,
+                            n_trials=n_trials, n_folds=_hpo_folds,
+                            balancing=balancing, treatment=treatment,
+                            progress_callback=_opt_cb,
+                        )
+                        _mprog[_algo_lbl].progress(1.0, text=f"Optuna {_algo_lbl} concluído")
+                        _mdetail[_algo_lbl].empty()
+
+                    elif hpo_mode == "Random Search":
+                        _ms_st(_mstatus[_algo_lbl], "manage_search",
+                               "Random Search — buscando hiperparâmetros…")
+                        _mprog[_algo_lbl].progress(0.0, text=f"Random Search {_algo_lbl}: 0/{n_iter}…")
+                        _ph_detail = _mdetail[_algo_lbl]
+                        _pb = _mprog[_algo_lbl]
+                        def _rs_cb(done, total, best, _p=_pb, _l=_algo_lbl, _ph=_ph_detail,
+                                   _fms=_ms_dt):
+                            _p.progress(done / total,
+                                        text=f"Random Search {_l}: {done}/{total} — AUC {best:.4f}")
+                            _fms(_ph, f"Iteração {done}/{total} — AUC: {best:.4f}")
+                        with st.spinner(f"Random Search: {_algo_lbl}…"):
+                            _params = random_search(
+                                X_train, y_train, algorithm=_algo,
+                                n_iter=n_iter, n_folds=_hpo_folds,
+                                balancing=balancing, treatment=treatment,
+                                progress_callback=_rs_cb,
+                            )
+                        _mprog[_algo_lbl].progress(1.0, text=f"Random Search {_algo_lbl} concluído")
+                        _mdetail[_algo_lbl].empty()
+
+                    elif hpo_mode == "Grid Search":
+                        _ms_st(_mstatus[_algo_lbl], "manage_search",
+                               "Grid Search — buscando hiperparâmetros…")
+                        with st.spinner(f"Grid Search — {_algo_lbl}…"):
+                            _params = grid_search(
+                                X_train, y_train, algorithm=_algo,
+                                n_folds=_hpo_folds, balancing=balancing,
+                                treatment=treatment,
+                            )
+
+                    # Treino
+                    if val_strategy == "Validação cruzada (k-fold)":
+                        _ms_st(_mstatus[_algo_lbl], "model_training",
+                               f"Treinando — {n_folds}-fold CV…")
+                        with st.spinner(f"Treinando {_algo_lbl} · {n_folds}-fold CV…"):
+                            _r = train_cv(
+                                X=X_train, y=y_train, algorithm=_algo,
+                                params=_params, n_folds=n_folds, balancing=balancing,
+                                treatment=treatment,
+                            )
+                            _r["validation_strategy"] = "cv"
+                    elif val_strategy == "Validação Temporal":
+                        _ms_st(_mstatus[_algo_lbl], "model_training",
+                               f"Treinando — corte temporal {temporal_cutoff}…")
+                        with st.spinner(f"Treinando {_algo_lbl} · corte temporal {temporal_cutoff}…"):
+                            import pandas as _pd_t
+                            _dates = _pd_t.to_datetime(cohort[temporal_date_col], errors="coerce")
+                            _cutoff_ts = _pd_t.Timestamp(temporal_cutoff)
+                            _train_mask = _dates < _cutoff_ts
+                            _test_mask  = _dates >= _cutoff_ts
+                            if _train_mask.sum() < 10 or _test_mask.sum() < 5:
+                                raise ValueError(
+                                    f"Split temporal insuficiente: treino={_train_mask.sum()}, "
+                                    f"teste={_test_mask.sum()}. Ajuste a data de corte."
+                                )
+                            X_tr = X_train[_train_mask.values]
+                            y_tr = y_train[_train_mask.values]
+                            X_te = X_train[_test_mask.values]
+                            y_te = y_train[_test_mask.values]
+                            _pipe = build_pipeline(X_tr, _algo, _params, balancing=balancing, treatment=treatment)
+                            _pipe.fit(X_tr, y_tr)
+                            _te_probs = _pipe.predict_proba(X_te)[:, 1]
+                            _te_preds = (_te_probs >= 0.5).astype(int)
+                            _m = {
+                                "roc_auc": float(_rauc(y_te, _te_probs)),
+                                "pr_auc": float(_ap(y_te, _te_probs)),
+                                "f1": float(_f1(y_te, _te_preds, zero_division=0)),
+                                "precision": float(_prec(y_te, _te_preds, zero_division=0)),
+                                "recall": float(_rec(y_te, _te_preds, zero_division=0)),
+                                "specificity": float(
+                                    ((_te_preds == 0) & (_np.asarray(y_te) == 0)).sum()
+                                    / max(int((_np.asarray(y_te) == 0).sum()), 1)),
+                                "brier": float(_brier(y_te, _te_probs)),
+                                "fold": 1,
+                            }
+                            _final = build_pipeline(X_train, _algo, _params, balancing=balancing, treatment=treatment)
+                            _final.fit(X_train, y_train)
+                            _imp = {}
+                            if hasattr(_final[-1], "feature_importances_"):
+                                _imp = dict(zip(X_train.columns, _final[-1].feature_importances_))
+                            _r = {
+                                "fold_metrics": [_m],
+                                "mean_metrics": {k: v for k, v in _m.items() if k != "fold"},
+                                "oof_probs": _te_probs,
+                                "y_eval": y_te.values,
+                                "test_index": list(X_te.index),
+                                "feature_importances": _imp,
+                                "model": _final,
+                                "X_columns": X_train.columns.tolist(),
+                                "algorithm": _algo,
+                                "validation_strategy": "temporal",
+                                "temporal_date_col": temporal_date_col,
+                                "temporal_cutoff": temporal_cutoff,
+                            }
+                    else:
+                        _ms_st(_mstatus[_algo_lbl], "model_training",
+                               f"Treinando — holdout {holdout_size:.0%}…")
+                        with st.spinner(f"Treinando {_algo_lbl} · holdout {holdout_size:.0%}…"):
+                            X_tr, X_te, y_tr, y_te = train_test_split(
+                                X_train, y_train, test_size=holdout_size,
+                                stratify=y_train, random_state=42,
+                            )
+                            _pipe = build_pipeline(X_tr, _algo, _params, balancing=balancing, treatment=treatment)
+                            _pipe.fit(X_tr, y_tr)
+                            _te_probs = _pipe.predict_proba(X_te)[:, 1]
+                            _te_preds = (_te_probs >= 0.5).astype(int)
+                            _m = {
+                                "roc_auc": float(_rauc(y_te, _te_probs)),
+                                "pr_auc": float(_ap(y_te, _te_probs)),
+                                "f1": float(_f1(y_te, _te_preds, zero_division=0)),
+                                "precision": float(_prec(y_te, _te_preds, zero_division=0)),
+                                "recall": float(_rec(y_te, _te_preds, zero_division=0)),
+                                "specificity": float(
+                                    ((_te_preds == 0) & (_np.asarray(y_te) == 0)).sum()
+                                    / max(int((_np.asarray(y_te) == 0).sum()), 1)),
+                                "brier": float(_brier(y_te, _te_probs)),
+                                "fold": 1,
+                            }
+                            _final = build_pipeline(X_train, _algo, _params, balancing=balancing, treatment=treatment)
+                            _final.fit(X_train, y_train)
+                            _imp = {}
+                            if hasattr(_final[-1], "feature_importances_"):
+                                _imp = dict(zip(X_train.columns, _final[-1].feature_importances_))
+                            _r = {
+                                "fold_metrics": [_m],
+                                "mean_metrics": {k: v for k, v in _m.items() if k != "fold"},
+                                "oof_probs": _te_probs,
+                                "y_eval": y_te.values,
+                                "test_index": list(X_te.index),
+                                "feature_importances": _imp,
+                                "model": _final,
+                                "X_columns": X_train.columns.tolist(),
+                                "algorithm": _algo,
+                                "validation_strategy": "holdout",
+                                "holdout_size": holdout_size,
+                            }
+
+                    _r["sample_n"] = len(X_train)
+                    _r["best_params"] = _params
+                    _r["hpo_mode"] = hpo_mode
+                    _r["algo_label"] = _algo_lbl
+                    _all_results.append(_r)
+                    _auc_final = _r["mean_metrics"]["roc_auc"]
+                    _mprog[_algo_lbl].progress(1.0, text=f"{_algo_lbl} — AUC {_auc_final:.4f} ✓")
+                    _ms_st(_mstatus[_algo_lbl], "task_alt",
+                           f"Concluído — AUC {_auc_final:.4f}")
+                    _mdetail[_algo_lbl].empty()
+
+                except Exception as _algo_err:
+                    _mprog[_algo_lbl].empty()
+                    _ms_st(_mstatus[_algo_lbl], "error", f"Erro — {_algo_err}")
+                    st.warning(f"{_algo_lbl}: erro durante treinamento — {_algo_err}")
+
+            # ── Guarda — ao menos um modelo precisa ter treinado ──────────────
+            if not _all_results:
+                st.error("Nenhum algoritmo foi treinado com sucesso. Verifique os dados e tente novamente.")
+                st.stop()
+
+            # ── Melhor resultado ──────────────────────────────────────────────
+            _best = max(_all_results, key=lambda r: r["mean_metrics"]["roc_auc"])
+            _best["all_results"] = _all_results
+            _lc_status_ph.caption(
+                f"Concluído. Melhor: {_best.get('algo_label', '')} — AUC {_best['mean_metrics']['roc_auc']:.4f}"
+            )
+            ss["model_results"] = _best
+            ss["active_sections"] = set()
+            # Store a sample of X for SHAP computation in relatorio.py
+            try:
+                ss["X_res"] = X[_best["X_columns"]].head(500)
+            except Exception:
+                ss["X_res"] = None
+            st.rerun()
+        except Exception as e:
+            st.error(f"Erro no treino: {e}")
+            st.exception(e)
+    st.stop()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ETAPA 7 — RESULTADOS
+# ═════════════════════════════════════════════════════════════════════════════
+_r7_title_col, _r7_gap_col, _r7_btn_col = st.columns([3, 1, 1])
+with _r7_title_col:
+    step_title(7, "Resultados do Modelo",
+               "Métricas de desempenho, curvas ROC/PR, explicabilidade SHAP e exportação.")
+with _r7_btn_col:
+    st.markdown("<div style='padding-top:4px'>", unsafe_allow_html=True)
+    if st.button("Relatório Final", key="btn_rel_top", icon=":material/summarize:", type="primary", use_container_width=True):
+        st.switch_page("pages/relatorio.py")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+ev = _ev()
+results = ss["model_results"]
+
+# ── Comparação de algoritmos (quando múltiplos foram treinados) ───────────────
+_all = results.get("all_results", [])
+if len(_all) > 1:
+    st.markdown("#### Comparação de Algoritmos")
+    _comp_df = pd.DataFrame([
+        {
+            "Algoritmo": r.get("algo_label", r.get("algorithm", "?").upper()),
+            "ROC-AUC":        round(r["mean_metrics"]["roc_auc"], 4),
+            "Sensibilidade":  round(r["mean_metrics"].get("recall", 0), 4),
+            "Especificidade": round(r["mean_metrics"].get("specificity", 0), 4),
+            "PR-AUC":         round(r["mean_metrics"]["pr_auc"], 4),
+            "F1":             round(r["mean_metrics"]["f1"], 4),
+        }
+        for r in _all
+    ]).sort_values("ROC-AUC", ascending=False).reset_index(drop=True)
+    st.dataframe(_comp_df, use_container_width=True, hide_index=True)
+    st.caption(
+        f"Detalhes abaixo referentes ao melhor modelo: "
+        f"**{results.get('algo_label', results.get('algorithm', '').upper())}**"
+        f" (ROC-AUC {results['mean_metrics']['roc_auc']:.4f})"
+    )
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+
+if len(_all) <= 1:
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+
+# ── Toggle pills (multi-select) ──────────────────────────────────────────────
+_sec_keys   = ["curvas", "distribuicao", "metricas_clinicas", "shap_global", "shap_individual", "equidade", "multicalibracao"]
+_sec_labels = ["Curvas ROC/PR", "Distribuição", "Métricas Clínicas",
+               "SHAP Global", "SHAP Individual", "Equidade", "Multicalibração"]
+if "active_sections" not in ss:
+    ss["active_sections"] = set()
+with st.container():
+    _pill_cols = st.columns([1] * len(_sec_keys), gap="small")
+    for _pi, (_pk, _pl) in enumerate(zip(_sec_keys, _sec_labels)):
+        with _pill_cols[_pi]:
+            _active = _pk in ss.get("active_sections", set())
+            if st.button(_pl, key=f"pill_{_pk}",
+                         type="primary" if _active else "secondary",
+                         use_container_width=True):
+                _secs = set(ss.get("active_sections", set()))
+                if _pk in _secs:
+                    _secs.discard(_pk)
+                else:
+                    _secs.add(_pk)
+                ss["active_sections"] = _secs
+                st.rerun()
+
+if not ss.get("active_sections"):
+    st.info("Selecione uma ou mais seções acima para visualizar os resultados detalhados.")
+
+m = results["mean_metrics"]
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("ROC-AUC",        f"{m['roc_auc']:.4f}")
+c2.metric("Sensibilidade",  f"{m.get('recall', 0):.4f}")
+c3.metric("Especificidade", f"{m.get('specificity', 0):.4f}")
+c4.metric("PR-AUC",         f"{m['pr_auc']:.4f}")
+c5.metric("F1-Score",       f"{m['f1']:.4f}")
+
+st.caption(
+    "Referência (saúde pública): ROC-AUC ≥ 0,75 = bom · ≥ 0,85 = excelente · "
+    "Sensibilidade e Especificidade calculadas com threshold 0,5 (ajustável em Métricas Clínicas)."
+)
+
+if m.get("specificity", 1.0) < 0.02 or m.get("recall", 1.0) < 0.02:
+    warn_box(
+        "Uma ou mais métricas estão próximas de zero — típico em dados "
+        "desbalanceados com threshold padrão 0,5. Explore o ponto de corte "
+        "ideal em <b>Métricas Clínicas</b> para calibrar sensibilidade vs. "
+        "especificidade conforme o objetivo clínico."
+    )
+
+col_exp1, col_exp2 = st.columns(2)
+with col_exp1:
+    _vs_r = results.get("validation_strategy", "cv")
+    _exp_label = ("Métricas por fold" if _vs_r == "cv"
+                  else "Métricas do corte temporal" if _vs_r == "temporal"
+                  else "Métricas do conjunto de teste")
+    with st.expander(_exp_label):
+        st.dataframe(ev.fold_metrics_table(results["fold_metrics"]), use_container_width=True, hide_index=True)
+with col_exp2:
+    with st.expander("Hiperparâmetros utilizados"):
+        bp = results.get("best_params") or {}
+        if bp:
+            st.json(bp)
+        else:
+            st.caption("Parâmetros padrão (sem configuração explícita).")
+        if results.get("sample_n"):
+            sn = results["sample_n"]
+            st.caption(f"Treinado com {sn:,} registros (amostra estratificada).")
+        if results.get("hpo_mode") == "Optuna (automático)":
+            st.caption("Hiperparâmetros encontrados via otimização bayesiana (Optuna).")
+
+X_res = X[results["X_columns"]]
+oof = results["oof_probs"]
+# Holdout/Temporal: oof/y_eval têm o tamanho do conjunto de TESTE; guardamos os
+# índices reais desse conjunto para alinhar subgrupos (equidade, multicalibração).
+_eval_index = results.get("test_index")
+if results.get("validation_strategy") in ("holdout", "temporal"):
+    y_arr = results["y_eval"]
+else:
+    y_arr = y.values
+    _eval_index = None  # em CV o oof é full-length, alinha com a coorte inteira
+
+if "curvas" in ss.get("active_sections", set()):
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**Curvas de desempenho**")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(ev.roc_chart(y_arr, oof), use_container_width=True)
+    with col2:
+        st.plotly_chart(ev.pr_chart(y_arr, oof), use_container_width=True)
+    st.plotly_chart(ev.calibration_chart(y_arr, oof), use_container_width=True)
+
+if "distribuicao" in ss.get("active_sections", set()):
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**Distribuição dos scores preditos**")
+    fig_dist = px.histogram(
+        x=oof, color=y_arr.astype(str), nbins=50, barmode="overlay", opacity=0.65,
+        labels={"x": "Score predito", "color": "Desfecho real"},
+        color_discrete_map={"0": "#3b82f6", "1": "#ef4444"},
+        title="Scores por classe real",
+    )
+    fig_dist.update_layout(margin=dict(t=40, b=0))
+    st.plotly_chart(fig_dist, use_container_width=True)
+
+if "shap_global" in ss.get("active_sections", set()):
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**SHAP — Explicabilidade Global**")
+    with st.spinner("Calculando SHAP…"):
+        try:
+            shap_fig = ev.shap_summary(results["model"], X_res.head(500))
+            shap_bee = ev.shap_beeswarm(results["model"], X_res.head(500))
+        except Exception:
+            shap_fig = None
+            shap_bee = None
+    if shap_fig:
+        st.plotly_chart(shap_fig, use_container_width=True)
+        if shap_bee:
+            st.plotly_chart(shap_bee, use_container_width=True)
+    else:
+        info_box("SHAP indisponível para este algoritmo ou configuração de pré-processamento.")
+
+if "shap_individual" in ss.get("active_sections", set()):
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**SHAP — Explicabilidade Individual**")
+    st.caption("Selecione um caso para ver a contribuição de cada variável na predição.")
+    case_idx = st.number_input("Índice do caso", min_value=0, max_value=len(X_res) - 1,
+                                value=0, step=1)
+    with st.spinner("Calculando SHAP individual…"):
+        try:
+            wf_fig = ev.shap_waterfall_chart(results["model"], X_res, int(case_idx))
+        except Exception:
+            wf_fig = None
+    if wf_fig:
+        st.plotly_chart(wf_fig, use_container_width=True)
+    else:
+        info_box("SHAP individual indisponível para este algoritmo ou configuração de pré-processamento.")
+
+if "metricas_clinicas" in ss.get("active_sections", set()):
+    import plotly.graph_objects as _go
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**Métricas Clínicas por Ponto de Corte**")
+    st.plotly_chart(ev.threshold_curve_chart(y_arr, oof), use_container_width=True)
+
+    # ── Slider de threshold (largura total, centralizado acima das colunas) ──
+    _sl_l, _sl_c, _sl_r = st.columns([1, 4, 1])
+    with _sl_c:
+        threshold = st.slider(
+            "Threshold", 0.01, 0.99, 0.50, 0.01,
+            help="Ponto de corte para classificar como positivo (alto risco).",
+        )
+    tm = ev.threshold_metrics(y_arr, oof, threshold)
+
+    # ── Duas colunas: esquerda = matriz | direita = cards ─────────────────────
+    _mc_left, _mc_right = st.columns([1, 1])
+
+    with _mc_left:
+        _cm_z     = [[tm["tn"], tm["fp"]], [tm["fn"], tm["tp"]]]
+        _cm_x     = ["Pred Negativo", "Pred Positivo"]
+        _cm_y     = ["Real Negativo", "Real Positivo"]
+        _cm_max   = max(tm["tn"], tm["fp"], tm["fn"], tm["tp"]) or 1
+
+        # Anotação por célula com cor adaptativa (branco em células escuras, preto em claras)
+        _cm_annots = []
+        for _ri, _row in enumerate(_cm_z):
+            for _ci, _val in enumerate(_row):
+                _norm = _val / _cm_max
+                _txt_color = "white" if _norm > 0.45 else "#111827"
+                _cm_annots.append(dict(
+                    x=_cm_x[_ci], y=_cm_y[_ri],
+                    text=f"<b>{_val:,}</b>",
+                    showarrow=False,
+                    font=dict(size=16, color=_txt_color),
+                    xref="x", yref="y",
+                ))
+
+        _cm_fig = _go.Figure(_go.Heatmap(
+            z=_cm_z,
+            x=_cm_x,
+            y=_cm_y,
+            colorscale=[[0, "#f0fdf4"], [0.5, "#4ade80"], [1, "#166534"]],
+            showscale=False,
+        ))
+        _cm_fig.update_layout(
+            title=dict(text="Matriz de Confusão", font=dict(size=13)),
+            height=320,
+            margin=dict(t=40, b=40, l=110, r=20),
+            xaxis=dict(side="bottom"),
+            yaxis=dict(autorange="reversed", scaleanchor="x", scaleratio=1),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            annotations=_cm_annots,
+        )
+        st.plotly_chart(_cm_fig, use_container_width=True)
+        st.markdown(
+            "<div style='font-size:0.72rem;color:#6b7280;line-height:1.7;margin-top:-8px'>"
+            "<b>VP</b> Verdadeiro Positivo &nbsp;·&nbsp; <b>FP</b> Falso Positivo<br>"
+            "<b>VN</b> Verdadeiro Negativo &nbsp;·&nbsp; <b>FN</b> Falso Negativo"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    with _mc_right:
+        # ── Espaço para alinhar topo dos cards com o topo da área do heatmap ─
+        # O gráfico plotly tem margin t=40 (título) + ~8px padding Streamlit ≈ 48px;
+        # usar 56px aproxima bem o primeiro card do início do heatmap.
+        st.markdown("<div style='margin-top:56px'></div>", unsafe_allow_html=True)
+        # ── Métricas derivadas ────────────────────────────────────────────────
+        _total  = tm["tp"] + tm["tn"] + tm["fp"] + tm["fn"]
+        _acc    = (tm["tp"] + tm["tn"]) / _total if _total > 0 else 0.0
+        _f1     = (2 * tm["sensitivity"] * tm["ppv"]) / (tm["sensitivity"] + tm["ppv"]) \
+                  if (tm["sensitivity"] + tm["ppv"]) > 0 else 0.0
+        _lr_pos = tm["sensitivity"] / (1 - tm["specificity"]) \
+                  if (1 - tm["specificity"]) > 1e-9 else float("inf")
+        _lr_neg = (1 - tm["sensitivity"]) / tm["specificity"] \
+                  if tm["specificity"] > 1e-9 else float("inf")
+
+        # ── 9 cards em grade 3×3 ─────────────────────────────────────────────
+        _r1a, _r1b, _r1c = st.columns(3)
+        _r1a.metric("Sensibilidade",  f"{tm['sensitivity']:.1%}",
+                    help="Taxa de verdadeiros positivos (recall / TPR)")
+        _r1b.metric("Especificidade", f"{tm['specificity']:.1%}",
+                    help="Taxa de verdadeiros negativos (TNR)")
+        _r1c.metric("F1-Score",       f"{_f1:.1%}",
+                    help="Média harmônica de Sensibilidade e VPP")
+        _r2a, _r2b, _r2c = st.columns(3)
+        _r2a.metric("VPP (Precisão)", f"{tm['ppv']:.1%}",
+                    help="Valor Preditivo Positivo — P(doente | teste+)")
+        _r2b.metric("VPN",            f"{tm['npv']:.1%}",
+                    help="Valor Preditivo Negativo — P(sadio | teste−)")
+        _r2c.metric("Acurácia",       f"{_acc:.1%}",
+                    help="Proporção total de classificações corretas")
+        _r3a, _r3b, _r3c = st.columns(3)
+        _r3a.metric("LR+",
+                    f"{_lr_pos:.2f}" if _lr_pos != float("inf") else "∞",
+                    help="Razão de verossimilhança positiva — sensib. / (1 − especif.)")
+        _r3b.metric("LR−",
+                    f"{_lr_neg:.2f}" if _lr_neg != float("inf") else "∞",
+                    help="Razão de verossimilhança negativa — (1 − sensib.) / especif.")
+        _r3c.metric("Positivos preditos",
+                    f"{tm['tp'] + tm['fp']:,}",
+                    help=f"VP {tm['tp']:,} + FP {tm['fp']:,} para threshold {threshold:.2f}")
+
+if "equidade" in ss.get("active_sections", set()):
+    import plotly.graph_objects as _go_eq
+    from sklearn.metrics import roc_curve as _roc_curve_eq
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**Análise de Equidade por Subgrupo**")
+    if _is_diy:
+        _target_col_eq = ss.get("upload_target") or cohort.columns[-1]
+        _fairness_cols = [
+            c for c in cohort.columns
+            if c != _target_col_eq and cohort[c].nunique() <= 30 and cohort[c].nunique() >= 2
+        ]
+        if _fairness_cols:
+            group_col = st.selectbox(
+                "Variável de subgrupo para equidade",
+                _fairness_cols,
+                help="Selecione qualquer variável categórica para estratificar a análise de equidade.",
+            )
+        else:
+            st.info("Nenhuma coluna com 2–30 valores únicos encontrada para análise de equidade.")
+            _fairness_cols = []
+    else:
+        _fairness_candidates = [
+            "SEXO", "RACA_COR", "UF_SIGLA", "UF_ZI", "UF_NASC", "MUNIC_RES",
+            "CS_SEXO", "CS_RACA", "age_group",
+        ]
+        _fairness_cols = [c for c in _fairness_candidates if c in cohort.columns]
+        if _fairness_cols:
+            group_col = st.selectbox("Estratificar por", _fairness_cols,
+                                      help="Analisa se o modelo performa igualmente para diferentes grupos.")
+        else:
+            st.info("Nenhuma variável demográfica encontrada na coorte (SEXO / CS_SEXO, RACA_COR / CS_RACA, UF_SIGLA, age_group).")
+    if _fairness_cols:
+        # alinha os grupos ao conjunto avaliado (teste em holdout/temporal; coorte toda em CV)
+        _eq_idx = _eval_index if _eval_index is not None else X_res.index
+        _groups = cohort.loc[_eq_idx, group_col].reset_index(drop=True)
+        sub_df = ev.subgroup_metrics_table(y_arr, oof, _groups)
+        if not sub_df.empty:
+            # ── Paleta de cores por subgrupo ─────────────────────────────
+            _EQ_COLORS = [
+                "#1a56db", "#e11d48", "#059669", "#7c3aed",
+                "#d97706", "#0891b2", "#be185d", "#65a30d",
+                "#dc2626", "#0284c7", "#16a34a", "#9333ea",
+            ]
+            # ── Curvas ROC sobrepostas ───────────────────────────────────
+            # Indexa sub_df por string para lookup rápido (subgroup_metrics_table
+            # armazena str(g), mas _groups contém o dtype original: int/float/str)
+            _sg_lookup = {str(row["Subgrupo"]): row for _, row in sub_df.iterrows()}
+
+            fig_eq = _go_eq.Figure()
+            # Linha de referência (classificador aleatório)
+            fig_eq.add_trace(_go_eq.Scatter(
+                x=[0, 1], y=[0, 1], mode="lines",
+                line=dict(color="#d1d5db", width=1.5, dash="dot"),
+                name="Aleatório (AUC 0.500)",
+                showlegend=True,
+            ))
+            _ci = 0
+            # Itera sobre valores ORIGINAIS do grupo (mesmo tipo que _groups)
+            for _sg_orig in sorted(_groups.unique()):
+                _sg_str = str(_sg_orig)
+                if _sg_str not in _sg_lookup:
+                    continue  # subgrupo filtrado por tamanho mínimo
+                _row = _sg_lookup[_sg_str]
+                # Máscara com tipo original → comparação sempre correta
+                _mask = (_groups.values == _sg_orig)
+                # Garante alinhamento: usa apenas índices onde mask é True
+                _y_sub = y_arr[_mask[:len(y_arr)]]
+                _p_sub = oof[_mask[:len(oof)]]
+                if len(_y_sub) < 10 or _y_sub.sum() < 2:
+                    continue
+                try:
+                    _fpr, _tpr, _ = _roc_curve_eq(_y_sub, _p_sub)
+                    _auc_val = float(_row["ROC-AUC"])
+                    _n = int(_mask.sum())
+                    _color = _EQ_COLORS[_ci % len(_EQ_COLORS)]
+                    fig_eq.add_trace(_go_eq.Scatter(
+                        x=_fpr, y=_tpr, mode="lines",
+                        name=f"{_sg_str}  ·  AUC {_auc_val:.3f}  (n={_n:,})",
+                        line=dict(color=_color, width=2.5),
+                    ))
+                    _ci += 1
+                except Exception:
+                    pass
+            fig_eq.update_layout(
+                title=f"Curvas ROC por {group_col}",
+                xaxis=dict(title="Taxa de Falsos Positivos", range=[0, 1],
+                           gridcolor="rgba(0,0,0,0.07)"),
+                yaxis=dict(title="Taxa de Verdadeiros Positivos", range=[0, 1.01],
+                           gridcolor="rgba(0,0,0,0.07)"),
+                height=460,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                legend=dict(
+                    orientation="v", yanchor="bottom", y=0.02,
+                    xanchor="right", x=0.98,
+                    bgcolor="rgba(255,255,255,0.85)",
+                    bordercolor="#e5e7eb", borderwidth=1,
+                    font=dict(size=12),
+                ),
+                margin=dict(t=50, b=40, l=60, r=20),
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_eq, use_container_width=True)
+            # ── Tabela de métricas por subgrupo ──────────────────────────
+            with st.expander("Métricas detalhadas por subgrupo"):
+                st.dataframe(sub_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum subgrupo com dados suficientes (mín. 20 casos e eventos positivos).")
+
+# ── Aba Calibração ─────────────────────────────────────────────────────────
+if "calibracao" in ss.get("active_sections", set()):
+    import numpy as _np_cal
+    from sklearn.metrics import brier_score_loss as _brier_cal
+    _, _, _, _calibrate_model, _, _, _ = _pipeline()
+
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**Calibração do Modelo**")
+    st.caption(
+        "Avalia se as probabilidades preditas correspondem às frequências reais. "
+        "Aplique calibração pós-treinamento aqui ou continue sem calibrar."
+    )
+    _brier_raw = _brier_cal(_np_cal.array(y_arr), _np_cal.array(oof))
+
+    if ss.get("calib_results") and not ss["calib_results"].get("skipped"):
+        cr = ss["calib_results"]
+        col_cal1, col_cal2 = st.columns(2)
+        with col_cal1:
+            st.plotly_chart(
+                ev.calibration_comparison_chart(
+                    cr["y_eval"], cr["raw_probs"], cr["cal_probs"],
+                    method_label=f'Calibrado ({cr["method"]})',
+                ),
+                use_container_width=True,
+            )
+        with col_cal2:
+            st.metric("Brier antes", f"{cr['brier_before']:.4f}")
+            st.metric("Brier depois", f"{cr['brier_after']:.4f}",
+                      delta=f"{-cr['brier_delta']:+.4f}", delta_color="inverse")
+            if cr["brier_delta"] > 0:
+                st.success("Calibração melhorou as probabilidades.")
+            elif cr["brier_delta"] < 0:
+                st.warning("Calibração piorou levemente. Considere o método alternativo.")
+            else:
+                st.info("Sem variação significativa.")
+        if st.button("Recalibrar com outro método", type="secondary", key="btn_recalib_tab"):
+            ss["calib_results"] = None
+            st.rerun()
+    else:
+        col_cc1, col_cc2 = st.columns(2)
+        with col_cc1:
+            st.plotly_chart(ev.calibration_chart(_np_cal.array(y_arr), _np_cal.array(oof)),
+                            use_container_width=True)
+        with col_cc2:
+            st.metric("Brier Score (bruto)", f"{_brier_raw:.4f}",
+                      help="Erro quadrático médio — menor é melhor. Perfeito = 0.")
+            st.caption(
+                "Curva próxima da diagonal = boa calibração. "
+                "Aplique calibração abaixo se necessário."
+            )
+        _calib_col1, _calib_col2 = st.columns([3, 1])
+        with _calib_col1:
+            _calib_tab_method = st.selectbox(
+                "Método",
+                ["sigmoid", "isotonic"],
+                format_func=lambda x: "Platt Scaling (Sigmoid)" if x == "sigmoid" else "Isotonic Regression",
+                key="calib_tab_method",
+            )
+        with _calib_col2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("Calibrar", type="primary", key="btn_calib_tab"):
+                with st.spinner("Executando calibração…"):
+                    try:
+                        _cr = _calibrate_model(results["model"], X_res, y, method=_calib_tab_method)
+                        ss["calib_results"] = _cr
+                        st.rerun()
+                    except Exception as _ce:
+                        st.error(f"Erro na calibração: {_ce}")
+        if st.button("Pular calibração", type="secondary", key="btn_skip_calib_tab"):
+            ss["calib_results"] = {"skipped": True, "cal_model": results["model"]}
+            st.rerun()
+
+# ── Multicalibração ─────────────────────────────────────────────────────────
+if "multicalibracao" in ss.get("active_sections", set()):
+    import numpy as _np_mc
+    from sklearn.calibration import calibration_curve as _cal_curve_mc
+    import plotly.graph_objects as _go_mc
+
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**Multicalibração — Ajuste de Calibração Global e por Subgrupo**")
+    st.caption(
+        "Aplica um método de calibração sobre as probabilidades OOF. "
+        "Avalia a calibração globalmente e por subgrupo para detectar vieses de fairness."
+    )
+
+    _oof_mc = _np_mc.array(oof)
+    _y_mc   = _np_mc.array(y_arr)
+
+    _mc_method_labels = {
+        "sigmoid":   "Platt Scaling (Sigmoid)",
+        "isotonic":  "Isotonic Regression",
+        "temperature": "Temperature Scaling",
+        "beta":      "Beta Calibration",
+        "logistic_multi": "Logistic Calibration (multivariado)",
+    }
+    _mc_method_desc = {
+        "sigmoid": (
+            "Ajusta uma regressão logística sobre os scores OOF. "
+            "Simples e eficaz para distribuições aproximadamente simétricas."
+        ),
+        "isotonic": (
+            "Ajuste isotônico não-paramétrico — mais flexível que Platt Scaling. "
+            "Pode sobreajustar em amostras pequenas."
+        ),
+        "temperature": (
+            "Muito usado em deep learning. Ajusta apenas um parâmetro (temperatura) sobre logits. "
+            "Simples e geralmente estável. Não altera o ranking das previsões."
+        ),
+        "beta": (
+            "Generaliza o Platt Scaling usando uma transformação baseada na distribuição beta. "
+            "Funciona melhor quando as probabilidades estão enviesadas nas extremidades (próximo de 0 ou 1)."
+        ),
+        "logistic_multi": (
+            "Extensão do Platt para múltiplas features (score + score²). "
+            "Pode capturar relações mais complexas entre o score bruto e a probabilidade real."
+        ),
+    }
+
+    # ── Controles ────────────────────────────────────────────────────────────
+    _mc_c1, _mc_c2, _mc_c3 = st.columns([2, 2, 1])
+    with _mc_c1:
+        _mc_method = st.selectbox(
+            "Método de calibração",
+            list(_mc_method_labels.keys()),
+            format_func=lambda x: _mc_method_labels[x],
+            key="mc_method",
+        )
+        st.caption(_mc_method_desc[_mc_method])
+    with _mc_c2:
+        _mc_sg_candidates = sorted([
+            c for c in X_res.columns
+            if 2 <= X_res[c].nunique() <= 15
+        ])
+        _mc_sg_col = st.selectbox(
+            "Subgrupo para análise de fairness",
+            _mc_sg_candidates if _mc_sg_candidates else ["(nenhum)"],
+            key="mc_sg_col",
+        )
+    with _mc_c3:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        _mc_apply = st.button("Aplicar", type="primary", key="btn_mc_apply")
+
+    if _mc_apply:
+        ss.pop("mc_results", None)
+
+    # ── Calcular calibração ───────────────────────────────────────────────────
+    if "mc_results" not in ss or _mc_apply:
+        with st.spinner("Calibrando…"):
+            try:
+                if _mc_method == "sigmoid":
+                    from sklearn.linear_model import LogisticRegression as _LR_mc
+                    _cmod = _LR_mc()
+                    _cmod.fit(_oof_mc.reshape(-1, 1), _y_mc)
+                    _cal_p = _cmod.predict_proba(_oof_mc.reshape(-1, 1))[:, 1]
+                elif _mc_method == "isotonic":
+                    from sklearn.isotonic import IsotonicRegression as _IR_mc
+                    _cmod = _IR_mc(out_of_bounds="clip")
+                    _cmod.fit(_oof_mc, _y_mc)
+                    _cal_p = _np_mc.clip(_cmod.predict(_oof_mc), 0, 1)
+                elif _mc_method == "temperature":
+                    # Temperature scaling: find T that minimises NLL over logits
+                    _eps_ts = 1e-7
+                    _logits = _np_mc.log(
+                        _np_mc.clip(_oof_mc, _eps_ts, 1 - _eps_ts) /
+                        _np_mc.clip(1 - _oof_mc, _eps_ts, 1 - _eps_ts)
+                    )
+                    from scipy.optimize import minimize_scalar as _ms_ts
+                    def _nll_ts(T):
+                        p = 1 / (1 + _np_mc.exp(-_logits / T))
+                        return -_np_mc.mean(_y_mc * _np_mc.log(p + _eps_ts) +
+                                            (1 - _y_mc) * _np_mc.log(1 - p + _eps_ts))
+                    _res_ts = _ms_ts(_nll_ts, bounds=(0.01, 10.0), method="bounded")
+                    _T_opt  = _res_ts.x
+                    _cal_p  = 1 / (1 + _np_mc.exp(-_logits / _T_opt))
+                elif _mc_method == "beta":
+                    # Beta calibration via log-odds transform + linear regression
+                    _eps_bc = 1e-7
+                    _p_clip = _np_mc.clip(_oof_mc, _eps_bc, 1 - _eps_bc)
+                    _x_bc = _np_mc.column_stack([
+                        _np_mc.log(_p_clip),
+                        _np_mc.log(1 - _p_clip),
+                    ])
+                    from sklearn.linear_model import LogisticRegression as _LR_bc
+                    _cmod = _LR_bc(fit_intercept=True, max_iter=500)
+                    _cmod.fit(_x_bc, _y_mc)
+                    _cal_p = _cmod.predict_proba(_x_bc)[:, 1]
+                else:  # logistic_multi
+                    _eps_lm = 1e-7
+                    _p_clip_lm = _np_mc.clip(_oof_mc, _eps_lm, 1 - _eps_lm)
+                    _x_lm = _np_mc.column_stack([
+                        _oof_mc,
+                        _oof_mc ** 2,
+                    ])
+                    from sklearn.linear_model import LogisticRegression as _LR_lm
+                    _cmod = _LR_lm(fit_intercept=True, max_iter=500)
+                    _cmod.fit(_x_lm, _y_mc)
+                    _cal_p = _cmod.predict_proba(_x_lm)[:, 1]
+                ss["mc_results"] = {
+                    "cal_probs": _cal_p.tolist(),
+                    "method": _mc_method,
+                    "method_label": _mc_method_labels[_mc_method],
+                    "sg_col": _mc_sg_col,
+                }
+            except Exception as _mc_err:
+                st.error(f"Erro na calibração: {_mc_err}")
+
+    if ss.get("mc_results"):
+        _mc_cp  = _np_mc.array(ss["mc_results"]["cal_probs"])
+        _mc_lbl = ss["mc_results"].get("method_label", ss["mc_results"]["method"])
+
+        def _ece_mc(y_t, p, n_bins=10):
+            edges = _np_mc.linspace(0, 1, n_bins + 1)
+            ece = 0.0
+            for lo, hi in zip(edges[:-1], edges[1:]):
+                mask = (p >= lo) & (p < hi)
+                if mask.sum() == 0:
+                    continue
+                ece += mask.sum() / len(y_t) * abs(float(y_t[mask].mean()) - float(p[mask].mean()))
+            return ece
+
+        # ── Curva global ─────────────────────────────────────────────────────
+        try:
+            _fr_raw, _mn_raw = _cal_curve_mc(_y_mc, _oof_mc, n_bins=10)
+            _fr_cal, _mn_cal = _cal_curve_mc(_y_mc, _mc_cp,  n_bins=10)
+        except Exception:
+            _fr_raw = _mn_raw = _fr_cal = _mn_cal = _np_mc.array([])
+
+        _fig_mc_glob = _go_mc.Figure()
+        _fig_mc_glob.add_trace(_go_mc.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="Calibração perfeita",
+                                               line=dict(color="#22c55e", dash="dash", width=1.5)))
+        if len(_mn_raw):
+            _fig_mc_glob.add_trace(_go_mc.Scatter(x=_mn_raw, y=_fr_raw, mode="lines+markers", name="Bruto",
+                                                   line=dict(color="#9ca3af", dash="dot", width=2), marker=dict(size=6)))
+        if len(_mn_cal):
+            _fig_mc_glob.add_trace(_go_mc.Scatter(x=_mn_cal, y=_fr_cal, mode="lines+markers",
+                                                   name=f"Calibrado ({_mc_lbl})",
+                                                   line=dict(color="#3b82f6", width=2.5), marker=dict(size=7)))
+        _fig_mc_glob.update_layout(
+            title="Curva de Calibração — OOF Global",
+            xaxis=dict(title="Probabilidade média predita", range=[0, 1]),
+            yaxis=dict(title="Fração de positivos (real)", range=[0, 1]),
+            height=380, legend=dict(orientation="h", y=-0.22),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(t=40, b=60, l=50, r=20),
+        )
+
+        from sklearn.metrics import brier_score_loss as _bsl_mc
+        _ece_b  = _ece_mc(_y_mc, _oof_mc)
+        _ece_a  = _ece_mc(_y_mc, _mc_cp)
+        _brier_b = float(_bsl_mc(_y_mc, _oof_mc))
+        _brier_a = float(_bsl_mc(_y_mc, _mc_cp))
+
+        # ── Chart + metrics side by side ──────────────────────────────────────
+        _col_chart, _col_metrics = st.columns([3, 2])
+        with _col_chart:
+            st.plotly_chart(_fig_mc_glob, use_container_width=True)
+        with _col_metrics:
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _mx1, _mx2 = st.columns(2)
+            with _mx1:
+                st.metric("ECE bruto", f"{_ece_b:.4f}")
+            with _mx2:
+                st.metric("ECE calibrado", f"{_ece_a:.4f}",
+                          delta=f"{_ece_a - _ece_b:+.4f}", delta_color="inverse")
+            _mx3, _mx4 = st.columns(2)
+            with _mx3:
+                st.metric("Brier bruto", f"{_brier_b:.4f}")
+            with _mx4:
+                st.metric("Brier calibrado", f"{_brier_a:.4f}",
+                          delta=f"{_brier_a - _brier_b:+.4f}", delta_color="inverse")
+
+        # ── Calibração por subgrupo ───────────────────────────────────────────
+        _sg = _mc_sg_col
+        if _mc_apply and _sg and _sg != "(nenhum)" and _sg in X_res.columns:
+            st.markdown(f"**Calibração por subgrupo: `{_sg}`**")
+            # alinha X ao conjunto avaliado (teste em holdout/temporal) p/ as máscaras
+            # baterem com _y_mc/_oof_mc/_mc_cp; em CV usa a coorte inteira
+            _X_sg = X_res.loc[_eval_index] if _eval_index is not None else X_res
+            _sg_vals = _X_sg[_sg].value_counts().head(8).index.tolist()
+
+            _fig_sg = _go_mc.Figure()
+            _fig_sg.add_trace(_go_mc.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="Perfeito",
+                                              line=dict(color="#22c55e", dash="dash", width=1.5)))
+            _sg_palette = ["#3b82f6", "#ef4444", "#f97316", "#a855f7", "#14b8a6", "#eab308", "#ec4899", "#64748b"]
+            _ece_tbl = []
+            for _ci_sg, _gv in enumerate(_sg_vals):
+                _gm = (_X_sg[_sg] == _gv).values
+                if _gm.sum() < 20:
+                    continue
+                _yg = _y_mc[_gm]; _rg = _oof_mc[_gm]; _cg = _mc_cp[_gm]
+                try:
+                    _fg, _mg = _cal_curve_mc(_yg, _cg, n_bins=min(10, max(3, int(_gm.sum() // 5))))
+                    _fig_sg.add_trace(_go_mc.Scatter(
+                        x=_mg, y=_fg, mode="lines+markers",
+                        name=f"{_gv} (n={int(_gm.sum()):,})",
+                        line=dict(color=_sg_palette[_ci_sg % len(_sg_palette)], width=2),
+                        marker=dict(size=6),
+                    ))
+                    _ece_tbl.append({
+                        "Subgrupo": str(_gv), "n": int(_gm.sum()),
+                        "ECE bruto": round(_ece_mc(_yg, _rg), 4),
+                        "ECE calibrado": round(_ece_mc(_yg, _cg), 4),
+                        "Brier bruto": round(float(_bsl_mc(_yg, _rg)), 4),
+                        "Brier calibrado": round(float(_bsl_mc(_yg, _cg)), 4),
+                    })
+                except Exception:
+                    pass
+
+            _fig_sg.update_layout(
+                title=f"Calibração após ajuste — por {_sg}",
+                xaxis=dict(title="Confiança média", range=[0, 1]),
+                yaxis=dict(title="Fração de positivos (real)", range=[0, 1]),
+                height=380,
+                legend=dict(orientation="h", y=-0.25),
+            )
+            st.plotly_chart(_fig_sg, use_container_width=True)
+
+            if _ece_tbl:
+                st.caption("ECE = Expected Calibration Error (menor = melhor calibração)")
+                for _row_sg in _ece_tbl:
+                    _sg_label = _row_sg["Subgrupo"]
+                    _sg_n = _row_sg["n"]
+                    _ece_b_sg = _row_sg["ECE bruto"]
+                    _ece_a_sg = _row_sg["ECE calibrado"]
+                    _brier_b_sg = _row_sg["Brier bruto"]
+                    _brier_a_sg = _row_sg["Brier calibrado"]
+                    st.markdown(
+                        f'<div style="font-size:.78rem;font-weight:600;color:#374151;'
+                        f'margin:.75rem 0 .25rem">{_sg_label} '
+                        f'<span style="font-weight:400;color:#9ca3af">n={_sg_n:,}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                    _sc1, _sc2, _sc3, _sc4 = st.columns(4)
+                    with _sc1:
+                        st.metric("ECE bruto", f"{_ece_b_sg:.4f}")
+                    with _sc2:
+                        st.metric("ECE calibrado", f"{_ece_a_sg:.4f}",
+                                  delta=f"{_ece_a_sg - _ece_b_sg:+.4f}", delta_color="inverse")
+                    with _sc3:
+                        st.metric("Brier bruto", f"{_brier_b_sg:.4f}")
+                    with _sc4:
+                        st.metric("Brier calibrado", f"{_brier_a_sg:.4f}",
+                                  delta=f"{_brier_a_sg - _brier_b_sg:+.4f}", delta_color="inverse")
+
+st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+st.markdown('<p class="ds-section-caption">Continue para benchmark entre estados ou vá direto para inferência individual.</p>',
+            unsafe_allow_html=True)
+_btn_col1, _btn_gap, _btn_col2 = st.columns([1, 3, 1])
+with _btn_col1:
+    if st.button("Benchmark", icon=":material/leaderboard:", type="secondary", use_container_width=True):
+        st.switch_page("pages/calibracao.py")
+with _btn_col2:
+    if st.button("Deploy", icon=":material/rocket_launch:", type="primary", use_container_width=True):
+        st.switch_page("pages/deploy.py")
+
+st.markdown('</div>', unsafe_allow_html=True)

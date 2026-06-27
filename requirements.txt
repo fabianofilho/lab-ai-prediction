@@ -1,0 +1,17 @@
+streamlit>=1.32
+pandas>=2.0
+pyarrow>=14.0
+plotly>=5.0
+scikit-learn>=1.4
+lightgbm>=4.0
+xgboost>=2.0
+catboost>=1.2.10   # 1.2.10 implementa __sklearn_tags__ (CatBoost quebrava em Pipeline no sklearn 1.6+)
+# tabpfn>=0.1.9   # opcional — requer torch (~1GB); não instalar no Streamlit Cloud free tier
+imbalanced-learn>=0.12
+optuna>=3.6
+shap>=0.44
+recordlinkage>=0.15
+dbfread>=2.0.7
+datasus-dbc>=0.1.3
+numpy>=1.26
+# pySUS>=0.6  # requer compilador C (pyreaddbc); use upload manual no Windows
