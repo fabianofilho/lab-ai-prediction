@@ -18,6 +18,7 @@ KEEP_COLS = [
     "ESCMAE",            # maternal education
     "RACACORMAE", "RACACOR",
     "ESTCIVMAE",
+    "QTDFILVIVO", "QTDFILMORT",  # paridade (filhos vivos/mortos) — feature de cesárea
     "CODANOMAL",         # congenital anomaly ICD-10
     "IDANOMAL",          # anomaly flag
     "TPAPRESENT",        # fetal presentation

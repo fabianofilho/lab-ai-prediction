@@ -19,6 +19,7 @@ KEEP_COLS = [
     "QT_DIARIAS", "DIAS_PERM",       # hospitalization days
     "VAL_TOT", "VAL_UTI",
     "UTI_MES_TO", "UTI_INT_TO",
+    "MARCA_UTI",                     # marca de uso de UTI (fallback do desfecho uso_uti)
     "CNES",
 ]
 

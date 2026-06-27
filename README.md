@@ -44,12 +44,13 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 
 ---
 
-## DATASUS — 17 desfechos
+## DATASUS — 20 desfechos
 
 Download automático com cache local. Todos os desfechos têm pipeline pronto
 ponta a ponta. Os que dependem de pareamento entre registros usam linkage
 determinístico ou probabilístico por quase-identificadores (o dado público
-não traz CNS/CPF).
+não traz CNS/CPF). Cada card tem um botão **Metodologia** que abre um painel
+lateral explicando como o dado é puxado e como o desfecho é derivado.
 
 ### Saúde Materno-Infantil (SINASC, SIM)
 | Desfecho | Fonte | Status |
@@ -57,6 +58,8 @@ não traz CNS/CPF).
 | Baixo Peso ao Nascer | SINASC | ok |
 | Prematuridade | SINASC | ok |
 | Apgar Baixo no 5º Minuto | SINASC | ok |
+| Parto Cesariana | SINASC | ok |
+| Anomalia Congênita | SINASC | ok (raro ~0,9%) |
 | Mortalidade Neonatal | SINASC + SIM | ok (linkage DTNASC+SEXO+PESO) |
 
 ### Internação Hospitalar (SIH, SIM)
@@ -64,6 +67,7 @@ não traz CNS/CPF).
 |---|---|---|
 | Readmissão Hospitalar 30 dias | SIH | ok (linkage nascimento+sexo+município+CEP) |
 | Permanência Hospitalar Prolongada | SIH | ok |
+| Uso de UTI na Internação | SIH | ok |
 | Infecção Hospitalar | SIH | ok |
 | Custo Hospitalar Elevado | SIH | ok |
 | Mortalidade Hospitalar | SIH + SIM | ok (óbito intra-hospitalar) |

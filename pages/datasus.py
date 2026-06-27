@@ -23,6 +23,12 @@ OUTCOME_GROUPS = {
         {"key": "apgar_baixo", "icon": "cardiology", "name": "Apgar Baixo no 5º Minuto",
          "source": "SINASC", "est_min": 5, "status": "ok", "linkage": None,
          "note": "Base única SINASC. Pipeline completo disponível."},
+        {"key": "cesarea", "icon": "pregnant_woman", "name": "Parto Cesariana",
+         "source": "SINASC", "est_min": 5, "status": "ok", "linkage": None,
+         "note": "Base única SINASC. Taxa de cesárea no Brasil entre as maiores do mundo."},
+        {"key": "anomalia_congenita", "icon": "neurology", "name": "Anomalia Congênita",
+         "source": "SINASC", "est_min": 5, "status": "ok", "linkage": None,
+         "note": "Base única SINASC. Desfecho raro (~0,9%), considere balanceamento."},
         {"key": "mortalidade_neonatal", "icon": "child_care", "name": "Mortalidade Neonatal",
          "source": "SINASC + SIM", "est_min": 12, "status": "ok",
          "linkage": "Linkage determinístico SINASC ↔ SIM por DTNASC/SEXO/PESO. Pareamento aproximado.",
@@ -36,6 +42,9 @@ OUTCOME_GROUPS = {
         {"key": "permanencia_prolongada", "icon": "bed", "name": "Permanência Hospitalar Prolongada",
          "source": "SIH", "est_min": 10, "status": "ok", "linkage": None,
          "note": "Base única SIH. Pipeline completo disponível."},
+        {"key": "uso_uti", "icon": "vital_signs", "name": "Uso de UTI na Internação",
+         "source": "SIH", "est_min": 10, "status": "ok", "linkage": None,
+         "note": "Base única SIH. Alvo derivado dos dias de UTI (UTI_MES_TO)."},
         {"key": "infeccao_hospitalar", "icon": "coronavirus", "name": "Infecção Hospitalar",
          "source": "SIH", "est_min": 10, "status": "ok", "linkage": None,
          "note": "Base única SIH. Pipeline completo disponível."},
@@ -91,6 +100,14 @@ METHODOLOGY = {
         "pull": "Base SINASC do estado/ano. Coorte = nascidos vivos; APGAR1 e APGAR5 saem das preditoras.",
         "target": "Apgar no 5º minuto < 7 (campo APGAR5), marcador de asfixia perinatal.",
     },
+    "cesarea": {
+        "pull": "Base SINASC do estado/ano. Coorte = todos os nascidos vivos. PARTO e STCESPARTO (proxy de cesárea planejada) saem das preditoras para não vazar o desfecho.",
+        "target": "Parto cesáreo (PARTO = 2, contra 1 = vaginal). Features: maternas (idade, escolaridade, raça, estado civil, paridade), pré-natal (consultas), idade gestacional, tipo de gravidez, apresentação fetal e sexo.",
+    },
+    "anomalia_congenita": {
+        "pull": "Base SINASC do estado/ano. IDANOMAL e CODANOMAL (CID da anomalia) saem das preditoras (anti-leakage).",
+        "target": "Presença de anomalia/malformação congênita ao nascer (IDANOMAL = 1). Desfecho raro (~0,9%); priorize recall/AUPRC e balanceamento.",
+    },
     "mortalidade_neonatal": {
         "pull": "Baixa SINASC (nascimentos) e SIM (óbitos) do estado/ano. Filtra no SIM os óbitos neonatais (idade em horas/dias ≤ 28) e marca os nascimentos cuja chave aparece entre esses óbitos.",
         "target": "Óbito até 28 dias de vida, pareado por linkage determinístico DTNASC + SEXO + PESO entre SINASC e SIM. Pareamento aproximado (sem identificador direto).",
@@ -98,6 +115,10 @@ METHODOLOGY = {
     "permanencia_prolongada": {
         "pull": "Base SIH-RD (internações) do estado/ano. Tempo de permanência calculado de DT_INTER a DT_SAIDA.",
         "target": "Internação com mais de 15 dias de permanência.",
+    },
+    "uso_uti": {
+        "pull": "Base SIH-RD do estado/ano (mensal e pesada; use estados menores ou max_rows controlado). Todas as colunas de UTI (UTI_MES_TO, VAL_UTI, MARCA_UTI, etc.) saem das preditoras.",
+        "target": "A internação utilizou UTI, derivado de UTI_MES_TO > 0 (dias-UTI no mês). Features de admissão: idade, sexo, CID principal (capítulo/bloco), permanência, caráter da internação, valor total, raça e procedimento.",
     },
     "infeccao_hospitalar": {
         "pull": "Base SIH-RD do estado/ano. O campo oficial de infecção hospitalar vem vazio no dado público, então usa-se um proxy.",
