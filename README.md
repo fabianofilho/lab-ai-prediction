@@ -46,8 +46,10 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 
 ## DATASUS — 17 desfechos
 
-Download automático com cache local. Status `ok` = pipeline pronto ponta a ponta;
-`dev` = requer identificador de paciente indisponível no dado público.
+Download automático com cache local. Todos os desfechos têm pipeline pronto
+ponta a ponta. Os que dependem de pareamento entre registros usam linkage
+determinístico ou probabilístico por quase-identificadores (o dado público
+não traz CNS/CPF).
 
 ### Saúde Materno-Infantil (SINASC, SIM)
 | Desfecho | Fonte | Status |
@@ -55,16 +57,16 @@ Download automático com cache local. Status `ok` = pipeline pronto ponta a pont
 | Baixo Peso ao Nascer | SINASC | ok |
 | Prematuridade | SINASC | ok |
 | Apgar Baixo no 5º Minuto | SINASC | ok |
-| Mortalidade Neonatal | SINASC + SIM | ok |
+| Mortalidade Neonatal | SINASC + SIM | ok (linkage DTNASC+SEXO+PESO) |
 
 ### Internação Hospitalar (SIH, SIM)
 | Desfecho | Fonte | Status |
 |---|---|---|
-| Readmissão Hospitalar 30 dias | SIH | dev |
+| Readmissão Hospitalar 30 dias | SIH | ok (linkage nascimento+sexo+município+CEP) |
 | Permanência Hospitalar Prolongada | SIH | ok |
 | Infecção Hospitalar | SIH | ok |
 | Custo Hospitalar Elevado | SIH | ok |
-| Mortalidade Hospitalar | SIH + SIM | ok |
+| Mortalidade Hospitalar | SIH + SIM | ok (óbito intra-hospitalar) |
 
 ### SINAN
 | Desfecho | Fonte | Status |

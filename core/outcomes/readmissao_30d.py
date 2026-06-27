@@ -6,6 +6,7 @@ import pandas as pd
 
 from core.outcomes.base import OutcomeConfig
 from core.data import sih as sih_prep
+from core.data import linker
 from core.features import engineering as eng
 
 
@@ -17,8 +18,11 @@ class ReadmissaoHospitalar30d(OutcomeConfig):
             description=(
                 "Prediz se um paciente será reinternado em até 30 dias após a alta hospitalar. "
                 "Utiliza apenas dados do SIH-RD (internações SUS). "
-                "O índice é a alta hospitalar (não morte), e o desfecho é uma nova internação "
-                "dentro de 30 dias para o mesmo CNS."
+                "O índice é a alta hospitalar (não morte). Como o SIH-RD público não expõe "
+                "CNS/CPF, o paciente é identificado por uma chave probabilística "
+                "(nascimento + sexo + município + CEP), no espírito da metodologia de "
+                "record linkage por quase-identificadores usada em estudos de readmissão por AIH. "
+                "Internações no mesmo dia da alta são tratadas como transferência."
             ),
             data_sources=["SIH"],
             observation_window_days=365,
@@ -28,7 +32,7 @@ class ReadmissaoHospitalar30d(OutcomeConfig):
             estimated_download_min=10,
             suggested_features=[
                 "IDADE", "SEXO", "diag_chapter", "diag_block",
-                "length_of_stay_days", "used_icu", "DIARIAS",
+                "length_of_stay_days", "used_icu", "QT_DIARIAS",
                 "n_diag_sec", "VAL_TOT", "proc_rea_code",
                 "age_group", "RACA_COR",
             ],
@@ -42,18 +46,19 @@ class ReadmissaoHospitalar30d(OutcomeConfig):
         df = df.dropna(subset=["DT_SAIDA"])
         df = df.sort_values("DT_SAIDA")
 
-        # For each discharge, check if same CNS has a new admission within 30d
-        id_col = next((c for c in ["CNS_PAC", "CPF_PAC"] if c in df.columns and df[c].str.len().gt(5).any()), None)
+        # Identificador de paciente: CNS/CPF direto se houver (dados não-públicos),
+        # senão a chave probabilística por quase-identificadores do SIH-RD público.
+        id_col = next(
+            (c for c in ["CNS_PAC", "CPF_PAC"]
+             if c in df.columns and df[c].astype(str).str.len().gt(5).any()),
+            None,
+        )
+        if id_col is None:
+            df["_patient_key"] = linker.build_patient_key(df)
+            id_col = "_patient_key"
 
-        if id_col:
-            df = _flag_readmission(df, id_col, window_days=30)
-        else:
-            # O SIH-RD público não expõe CNS_PAC/CPF_PAC do paciente.
-            # Sem identificador, linkage temporal é impossível → target zero.
-            # Use este desfecho apenas com dados que incluam identificador do paciente.
-            df["readmissao_30d"] = 0
-
-        return df
+        df = linker.flag_readmission_self(df, id_col, window_days=30)
+        return df.drop(columns=["_patient_key"], errors="ignore")
 
     def build_features(self, cohort: pd.DataFrame) -> pd.DataFrame:
         df = cohort.copy()
@@ -92,25 +97,3 @@ class ReadmissaoHospitalar30d(OutcomeConfig):
 
     def get_target(self, cohort: pd.DataFrame) -> pd.Series:
         return cohort[self.target_col].fillna(0).astype(int)
-
-
-def _flag_readmission(df: pd.DataFrame, id_col: str, window_days: int) -> pd.DataFrame:
-    """For each row, check if the same patient was admitted within window_days after DT_SAIDA."""
-    df = df.copy()
-    df["readmissao_30d"] = 0
-
-    # Group by patient ID
-    patient_admissions = df[df[id_col].str.len() > 5].groupby(id_col)["DT_INTER"].apply(list).to_dict()
-
-    for idx, row in df.iterrows():
-        pid = row.get(id_col, "")
-        discharge = row.get("DT_SAIDA")
-        if not pid or pd.isna(discharge):
-            continue
-        admissions = patient_admissions.get(pid, [])
-        for adm in admissions:
-            if pd.notna(adm) and 0 < (adm - discharge).days <= window_days:
-                df.at[idx, "readmissao_30d"] = 1
-                break
-
-    return df

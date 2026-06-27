@@ -754,17 +754,28 @@ if ss["cohort"] is None:
             _download_clicked = st.button("Baixar", type="primary")
 
         # ── Linha 2: Limite de registros ───────────────────────────────────────────
+        # Readmissão depende de ambas as internações do paciente estarem na amostra;
+        # subamostra pequena quebra os pares e zera o desfecho. Eleva o piso.
+        _is_readm = ss["outcome_key"] == "readmissao_30d"
+        _min_n = 20_000 if _is_readm else 1_000
+        _val_n = max(int(ss["sample_n"]), 50_000) if _is_readm else int(ss["sample_n"])
         st.markdown("<div style='margin-top:.75rem'></div>", unsafe_allow_html=True)
-        with st.expander("Limite de registros por download", expanded=False):
+        with st.expander("Limite de registros por download", expanded=_is_readm):
+            if _is_readm:
+                st.caption(
+                    "Readmissão é detectada por self-linkage temporal: ambas as internações "
+                    "do paciente precisam estar na amostra. Use um valor alto (≥ 30.000) para "
+                    "uma taxa representativa; amostras pequenas subestimam o desfecho."
+                )
             sa1, sa2 = st.columns(2)
             with sa1:
                 ss["sample_n"] = st.number_input(
                     "Máximo de registros",
-                    min_value=1_000,
+                    min_value=_min_n,
                     max_value=500_000,
-                    value=ss["sample_n"],
+                    value=_val_n,
                     step=5_000,
-                    help="Limita o download para evitar falta de memória. Padrão: 1.000. Use 500.000 para dados completos.",
+                    help="Limita o download para evitar falta de memória. Use 500.000 para dados completos.",
                 )
             with sa2:
                 ss["sample_seed"] = st.number_input(

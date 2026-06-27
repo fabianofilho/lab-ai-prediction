@@ -132,6 +132,91 @@ def link_probabilistic(
             .drop_duplicates(subset=[left_id]))
 
 
+# ── Quase-identificador de paciente (chave SUS-like) ──────────────────────────
+
+# Campos do SIH-RD público que, combinados, aproximam um identificador de paciente.
+# CNS/CPF do paciente não são expostos no dado público, mas estes quase-identificadores
+# (todos ~100% preenchidos) formam uma chave altamente discriminante. Metodologia usada
+# em estudos brasileiros de readmissão por AIH.
+SIH_PATIENT_KEY_FIELDS = ["NASC", "SEXO", "MUNIC_RES", "CEP"]
+
+
+def build_patient_key(
+    df: pd.DataFrame,
+    fields: list[str] = SIH_PATIENT_KEY_FIELDS,
+) -> pd.Series:
+    """Constrói uma chave sintética de paciente a partir de quase-identificadores.
+
+    Retorna uma Series de strings 'NASC|SEXO|MUNIC_RES|CEP' (campos disponíveis),
+    ou pd.NA quando o campo de nascimento é ausente/inválido (não dá para parear).
+    """
+    present = [c for c in fields if c in df.columns]
+    if not present:
+        return pd.Series(pd.NA, index=df.index, dtype="object")
+
+    def _norm(col: str) -> pd.Series:
+        s = df[col].astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
+        return s
+
+    parts = [_norm(c) for c in present]
+    key = parts[0]
+    for p in parts[1:]:
+        key = key.str.cat(p, sep="|")
+
+    # invalida chaves sem nascimento utilizável (NASC vazio, nan, zeros, ****)
+    if "NASC" in present:
+        nasc = _norm("NASC")
+        bad = nasc.isin(["", "nan", "None", "0", "00000000"]) | nasc.str.contains(r"\*", na=True) | (nasc.str.len() < 6)
+        key = key.mask(bad, pd.NA)
+    return key
+
+
+def flag_readmission_self(
+    df: pd.DataFrame,
+    key_col: str,
+    admit_col: str = "DT_INTER",
+    discharge_col: str = "DT_SAIDA",
+    window_days: int = 30,
+    flag_col: str = "readmissao_30d",
+) -> pd.DataFrame:
+    """Marca, para cada internação-índice, se o MESMO paciente reinternou em até
+    `window_days` dias após a alta. Self-linkage temporal vetorizado (merge_asof).
+
+    Readmissão = existe uma internação posterior (DT_INTER) do mesmo paciente com
+    0 < (DT_INTER - DT_SAIDA) <= window_days. delta == 0 é tratado como transferência
+    no mesmo dia e NÃO conta como readmissão.
+    """
+    df = df.copy()
+    df["_row_id"] = range(len(df))
+    df[flag_col] = 0
+
+    valid = df[df[key_col].notna() & df[admit_col].notna() & df[discharge_col].notna()].copy()
+    if valid.empty:
+        return df.drop(columns=["_row_id"])
+
+    left = (valid[[key_col, discharge_col, "_row_id"]]
+            .rename(columns={discharge_col: "_dis"})
+            .sort_values("_dis"))
+    right = (valid[[key_col, admit_col, "_row_id"]]
+             .rename(columns={admit_col: "_adm", "_row_id": "_radm_id"})
+             .sort_values("_adm"))
+
+    merged = pd.merge_asof(
+        left, right,
+        left_on="_dis", right_on="_adm",
+        by=key_col, direction="forward",
+        allow_exact_matches=False,
+    )
+    delta = (merged["_adm"] - merged["_dis"]).dt.days
+    is_readm = (
+        delta.notna() & (delta > 0) & (delta <= window_days)
+        & (merged["_radm_id"] != merged["_row_id"])
+    )
+    readm_rows = merged.loc[is_readm.values, "_row_id"]
+    df.loc[df["_row_id"].isin(set(readm_rows)), flag_col] = 1
+    return df.drop(columns=["_row_id"])
+
+
 def link_sih_sim(
     sih: pd.DataFrame,
     sim: pd.DataFrame,

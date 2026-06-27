@@ -30,9 +30,9 @@ OUTCOME_GROUPS = {
     ],
     "Internação Hospitalar": [
         {"key": "readmissao_30d", "icon": "sync", "name": "Readmissão Hospitalar 30 dias",
-         "source": "SIH", "est_min": 10, "status": "dev",
-         "linkage": "Requer identificador do paciente para linkage temporal. O SIH-RD público não expõe CNS/CPF.",
-         "note": "Reinternação em 30 dias para o mesmo paciente. Sem identificador no SIH-RD público, o alvo fica zerado."},
+         "source": "SIH", "est_min": 10, "status": "ok",
+         "linkage": "Linkage probabilístico por quase-identificadores (nascimento + sexo + município + CEP), pois o SIH-RD público não traz CNS/CPF.",
+         "note": "Reinternação em 30 dias para o mesmo paciente. Use amostra grande (≥ 30.000) para taxa representativa."},
         {"key": "permanencia_prolongada", "icon": "bed", "name": "Permanência Hospitalar Prolongada",
          "source": "SIH", "est_min": 10, "status": "ok", "linkage": None,
          "note": "Base única SIH. Pipeline completo disponível."},
