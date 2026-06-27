@@ -401,6 +401,19 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .sb-step-value {
   font-size: .78rem; color: var(--fg); font-weight: 500; line-height: 1.35;
 }
+/* botão "i" de metodologia na sidebar: círculo discreto */
+[class*="st-key-sb_methodology"] button {
+  border-radius: 50% !important;
+  width: 30px !important; height: 30px !important;
+  min-width: 30px !important; padding: 0 !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-style: italic !important; font-weight: 700 !important;
+  color: #6b7280 !important; border: 1px solid #d1d5db !important;
+  background: #ffffff !important; line-height: 1 !important;
+}
+[class*="st-key-sb_methodology"] button:hover {
+  color: #223886 !important; border-color: #223886 !important; background: #eef1fb !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -576,13 +589,24 @@ def render_sidebar() -> None:
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            if st.button("Editar", key="sb_chg_outcome"):
+            _sb1, _sb2 = st.columns([3, 1])
+            with _sb1:
+                _edit_outcome = st.button("Editar", key="sb_chg_outcome", use_container_width=True)
+            with _sb2:
+                from core.methodology import show_methodology, has_methodology
+                _sb_meth = (
+                    st.button("i", key="sb_methodology", help="Ver metodologia desta base")
+                    if has_methodology(_ok2) else False
+                )
+            if _edit_outcome:
                 for k in ["outcome_key", "raw_data", "cohort", "feature_config",
                           "treatment_config", "model_config", "model_results",
                           "calib_results", "comparison_results", "manual_needed"]:
                     ss[k] = _defaults[k]
                 ss.pop("active_sections", None)
                 st.rerun()
+            if _sb_meth:
+                show_methodology(_ok2)
 
         # Step 2: Dados
         if ss.get("raw_data"):

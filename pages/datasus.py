@@ -3,6 +3,8 @@ from pathlib import Path
 from PIL import Image as _PILImage
 import streamlit as st
 
+from core.methodology import show_methodology
+
 _favicon = _PILImage.open(Path(__file__).parent.parent / "favicon.png")
 st.set_page_config(
     page_title="DATASUS — Lab AI Prediction",
@@ -84,126 +86,6 @@ OUTCOME_GROUPS = {
     ],
 }
 
-# ── Metodologia por desfecho ───────────────────────────────────────────────────
-# pull   = como o dado é puxado e a coorte construída
-# target = definição operacional do desfecho (como o alvo é derivado)
-METHODOLOGY = {
-    "baixo_peso_nascer": {
-        "pull": "Download direto da base SINASC (nascidos vivos) do estado e ano escolhidos. Coorte = todos os nascimentos. O campo PESO é removido das preditoras para não vazar o desfecho.",
-        "target": "Peso ao nascer < 2500 g (campo PESO do SINASC).",
-    },
-    "prematuridade": {
-        "pull": "Base SINASC do estado/ano. Coorte = todos os nascimentos; a idade gestacional (GESTACAO, categórica) é removida das preditoras.",
-        "target": "Idade gestacional abaixo de 37 semanas (faixas de GESTACAO).",
-    },
-    "apgar_baixo": {
-        "pull": "Base SINASC do estado/ano. Coorte = nascidos vivos; APGAR1 e APGAR5 saem das preditoras.",
-        "target": "Apgar no 5º minuto < 7 (campo APGAR5), marcador de asfixia perinatal.",
-    },
-    "cesarea": {
-        "pull": "Base SINASC do estado/ano. Coorte = todos os nascidos vivos. PARTO e STCESPARTO (proxy de cesárea planejada) saem das preditoras para não vazar o desfecho.",
-        "target": "Parto cesáreo (PARTO = 2, contra 1 = vaginal). Features: maternas (idade, escolaridade, raça, estado civil, paridade), pré-natal (consultas), idade gestacional, tipo de gravidez, apresentação fetal e sexo.",
-    },
-    "anomalia_congenita": {
-        "pull": "Base SINASC do estado/ano. IDANOMAL e CODANOMAL (CID da anomalia) saem das preditoras (anti-leakage).",
-        "target": "Presença de anomalia/malformação congênita ao nascer (IDANOMAL = 1). Desfecho raro (~0,9%); priorize recall/AUPRC e balanceamento.",
-    },
-    "mortalidade_neonatal": {
-        "pull": "Baixa SINASC (nascimentos) e SIM (óbitos) do estado/ano. Filtra no SIM os óbitos neonatais (idade em horas/dias ≤ 28) e marca os nascimentos cuja chave aparece entre esses óbitos.",
-        "target": "Óbito até 28 dias de vida, pareado por linkage determinístico DTNASC + SEXO + PESO entre SINASC e SIM. Pareamento aproximado (sem identificador direto).",
-    },
-    "permanencia_prolongada": {
-        "pull": "Base SIH-RD (internações) do estado/ano. Tempo de permanência calculado de DT_INTER a DT_SAIDA.",
-        "target": "Internação com mais de 15 dias de permanência.",
-    },
-    "uso_uti": {
-        "pull": "Base SIH-RD do estado/ano (mensal e pesada; use estados menores ou max_rows controlado). Todas as colunas de UTI (UTI_MES_TO, VAL_UTI, MARCA_UTI, etc.) saem das preditoras.",
-        "target": "A internação utilizou UTI, derivado de UTI_MES_TO > 0 (dias-UTI no mês). Features de admissão: idade, sexo, CID principal (capítulo/bloco), permanência, caráter da internação, valor total, raça e procedimento.",
-    },
-    "infeccao_hospitalar": {
-        "pull": "Base SIH-RD do estado/ano. O campo oficial de infecção hospitalar vem vazio no dado público, então usa-se um proxy.",
-        "target": "Proxy: presença de CID de infecção no diagnóstico secundário (DIAGSEC1). Aproximação, subestima a incidência real.",
-    },
-    "custo_elevado": {
-        "pull": "Base SIH-RD do estado/ano. O custo é o valor total da AIH (VAL_TOT).",
-        "target": "Custo acima do percentil 90 da própria amostra (decil superior). Por construção, ~10% positivos.",
-    },
-    "mortalidade_hospitalar": {
-        "pull": "Base SIH-RD do estado/ano, opcionalmente enriquecida com óbitos do SIM. O alvo principal é a morte registrada na própria AIH.",
-        "target": "Óbito durante a internação (campo MORTE do SIH = 1). O link com SIM entra como reforço quando disponível.",
-    },
-    "abandono_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados (situação de encerramento conhecida).",
-        "target": "Encerramento por abandono de tratamento (SITUA_ENCE).",
-    },
-    "abandono_hanseniase": {
-        "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos encerrados.",
-        "target": "Saída por abandono de tratamento (TPALTA_N = 3).",
-    },
-    "violencia_autoprovocada": {
-        "pull": "Base SINAN-Violência (nacional, filtrada por UF). LES_AUTOP, CONS_SUIC e VIOL_AUTO são removidas das preditoras (anti-leakage).",
-        "target": "Lesão autoprovocada (LES_AUTOP = 1), com consequência suicida / violência autoprovocada como fallback de anos antigos.",
-    },
-    "intoxicacao_grave": {
-        "pull": "Base SINAN-Intoxicação Exógena (nacional, filtrada por UF). Coorte = casos confirmados com evolução conhecida; EVOLUCAO sai das preditoras.",
-        "target": "Desfecho adverso: óbito ou incapacidade permanente na evolução do caso.",
-    },
-    "dengue_grave": {
-        "pull": "Base SINAN-Dengue (nacional, filtrada por UF; arquivo grande, 1º download mais lento). CLASSI_FIN sai das preditoras; sinais de alarme ALRM_* entram como features.",
-        "target": "Classificação final de dengue com sinais de alarme (CLASSI_FIN = 8) ou dengue grave (CLASSI_FIN = 11).",
-    },
-    "chikungunya_hospitalizado": {
-        "pull": "Base SINAN-Chikungunya (nacional, filtrada por UF). Coorte = casos confirmados.",
-        "target": "Necessidade de hospitalização (HOSPITALIZ = 1).",
-    },
-    "obito_aids": {
-        "pull": "Base SINAN-AIDS adulto (nacional, filtrada por UF). Doenças definidoras de AIDS entram como features; EVOLUCAO sai.",
-        "target": "Evolução para óbito por AIDS (EVOLUCAO = 2).",
-    },
-    "sifilis_nao_cura": {
-        "pull": "Base SINAN-Sífilis Adquirida (nacional, filtrada por UF). Coorte = casos confirmados com evolução conhecida.",
-        "target": "Evolução diferente de cura (falha terapêutica, abandono ou óbito).",
-    },
-    "readmissao_30d": {
-        "pull": "Base SIH-RD do estado/ano. Como o dado público não traz CNS/CPF, o paciente é identificado por chave probabilística (nascimento + sexo + município de residência + CEP). Self-linkage temporal por merge_asof entre alta e novas internações.",
-        "target": "Nova internação do mesmo paciente em até 30 dias após a alta. Internação no mesmo dia da alta é tratada como transferência. Exige amostra grande (≥ 30.000) para taxa representativa.",
-    },
-}
-
-
-@st.dialog("Metodologia")
-def _methodology_dialog(card: dict):
-    """Drawer lateral (direita) com a metodologia de obtenção do dado do desfecho."""
-    key = card["key"]
-    meth = METHODOLOGY.get(key, {})
-    st.markdown(f"#### {card['name']}")
-    st.caption(f"Fonte: {card['source']}  ·  ~{card['est_min']} min de download")
-    st.markdown("---")
-
-    st.markdown("**Como o dado é puxado**")
-    st.write(meth.get("pull", "Metodologia em documentação."))
-
-    st.markdown("**Definição do desfecho**")
-    st.write(meth.get("target", "—"))
-
-    if card.get("linkage"):
-        st.markdown("**Linkage**")
-        st.write(card["linkage"])
-
-    if card.get("note"):
-        st.markdown("**Ressalvas**")
-        st.write(card["note"])
-
-    # Variáveis preditoras (import tardio para não pesar o load da página)
-    try:
-        from core.outcomes import OUTCOMES
-        oc = OUTCOMES.get(key)
-        feats = list(getattr(oc, "suggested_features", []) or []) if oc else []
-        if feats:
-            st.markdown("**Variáveis preditoras sugeridas**")
-            st.caption(", ".join(feats))
-    except Exception:
-        pass
 
 
 if "outcome_key" not in st.session_state:
@@ -352,16 +234,30 @@ div[data-testid="stDialog"] div[role="dialog"] {
 div[data-testid="stDialog"] div[role="dialog"] h4 {
     color: #223886 !important; margin-top: 0 !important;
 }
-/* botão Metodologia: discreto, tipo link */
-div[data-testid="stButton"] > button[kind="tertiary"],
-div[data-testid="stButton"] > button[data-testid="baseButton-tertiary"] {
-    color: #6b7280 !important; font-size: .72rem !important;
-    padding: 2px 4px !important; font-weight: 500 !important;
-    border: none !important; background: transparent !important;
+/* botão "i" de metodologia: sobreposto no canto superior direito do card */
+[data-testid="stColumn"] { position: relative; }
+[class*="st-key-meth_"] {
+    position: absolute !important;
+    top: 10px !important; right: 12px !important;
+    width: auto !important; min-width: 0 !important;
+    margin: 0 !important; z-index: 6;
 }
-div[data-testid="stButton"] > button[kind="tertiary"]:hover,
-div[data-testid="stButton"] > button[data-testid="baseButton-tertiary"]:hover {
-    color: #223886 !important; background: transparent !important;
+[class*="st-key-meth_"] button {
+    border-radius: 50% !important;
+    width: 26px !important; height: 26px !important;
+    min-width: 26px !important; min-height: 26px !important;
+    padding: 0 !important;
+    font-family: Georgia, "Times New Roman", serif !important;
+    font-style: italic !important; font-weight: 700 !important;
+    font-size: .85rem !important;
+    color: #9ca3af !important;
+    border: 1px solid #e5e7eb !important;
+    background: #ffffff !important;
+    line-height: 1 !important;
+}
+[class*="st-key-meth_"] button:hover {
+    color: #223886 !important; border-color: #223886 !important;
+    background: #eef1fb !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -389,12 +285,12 @@ st.markdown(
 st.markdown(
     '<div class="ds-legend">'
     '<span class="ds-legend-item"><span class="dot-ok"></span>Pipeline completo disponível</span>'
-    '<span class="ds-legend-item"><span class="dot-dev"></span>Em desenvolvimento (requer linkage)</span>'
-    '<span class="ds-legend-item"><span class="dot-link"></span>Linkage entre bases</span>'
-    '<span class="ds-legend-item"><span class="dot-upload"></span>Upload manual necessário</span>'
     '<span style="color:#d1d5db">|</span>'
     '<span class="ds-legend-item"><span class="ms" style="font-size:.85rem;color:#6b7280">schedule</span>'
     'Tempo estimado de download + processamento (1.000 registros)</span>'
+    '<span style="color:#d1d5db">|</span>'
+    '<span class="ds-legend-item"><span class="ms" style="font-size:.85rem;color:#6b7280">info</span>'
+    'Botão <b>i</b> abre a metodologia de cada desfecho</span>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -426,7 +322,6 @@ try:
                 is_sel = sel == key
 
                 dev_badge    = '<span class="ds-badge-dev">EM DESENVOLVIMENTO</span>' if status == "dev" else ""
-                link_badge   = '<span class="ds-badge-link">LINKAGE</span>' if linkage else ""
                 upload_badge = '<span class="ds-badge-upload">UPLOAD NECESSÁRIO</span>' if status == "upload" else ""
 
                 card_cls = "ds-card"
@@ -437,9 +332,8 @@ try:
                 if is_sel:
                     card_cls += " sel"
 
+                # O detalhe de linkage agora vive no drawer de Metodologia (botão "i").
                 note_html = f'<div class="ds-card-note">{note}</div>' if note else ""
-                if linkage:
-                    note_html += f'<div class="ds-card-note" style="color:#b45309;display:flex;align-items:center;gap:4px"><span class="ms" style="font-size:.8rem">warning</span> {linkage}</div>'
 
                 with cols[col_idx]:
                     st.markdown(
@@ -450,7 +344,7 @@ try:
                         f'<span class="ds-badge-time">'
                         f'<span class="ms" style="font-size:.7rem;color:#9ca3af">schedule</span>'
                         f'~{est} min</span>'
-                        f'{dev_badge}{upload_badge}{link_badge}'
+                        f'{dev_badge}{upload_badge}'
                         f'</div>'
                         f'{note_html}'
                         f'</div>',
@@ -463,17 +357,18 @@ try:
                         btn_label = "Aguardando Upload"
                     else:
                         btn_label = "Ver (em dev.)"
-                    try:
-                        clicked = st.button(
-                            btn_label, key=f"sel_{key}",
-                            type="primary" if is_sel else "secondary",
-                            use_container_width=True,
-                        )
-                    except TypeError:
-                        clicked = st.button(
-                            btn_label, key=f"sel_{key}",
-                            type="primary" if is_sel else "secondary",
-                        )
+
+                    # Botão "i" sobreposto no canto superior direito do card (CSS absoluto)
+                    _meth_clicked = st.button(
+                        "i", key=f"meth_{key}",
+                        help="Ver metodologia deste desfecho",
+                    )
+                    clicked = st.button(
+                        btn_label, key=f"sel_{key}",
+                        type="primary" if is_sel else "secondary",
+                        use_container_width=True,
+                    )
+
                     if clicked:
                         if status == "ok":
                             st.session_state.outcome_key = key
@@ -485,18 +380,8 @@ try:
                         else:
                             st.toast("Módulo em desenvolvimento — disponível em breve.")
 
-                    try:
-                        _meth_clicked = st.button(
-                            "ⓘ Metodologia", key=f"meth_{key}",
-                            type="tertiary", use_container_width=True,
-                        )
-                    except TypeError:
-                        _meth_clicked = st.button(
-                            "ⓘ Metodologia", key=f"meth_{key}",
-                            type="secondary",
-                        )
                     if _meth_clicked:
-                        _methodology_dialog(o)
+                        show_methodology(key)
 except Exception as e:
     import traceback
     st.error(f"**Erro na aplicação:** {e}")
