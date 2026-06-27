@@ -31,7 +31,7 @@ class ViolenciaAutoprovocada(OutcomeConfig):
                 "VIOL_FISIC", "VIOL_PSICO", "VIOL_SEXU", "VIOL_NEGLI",
                 "AG_ENVEN", "AG_CORTE", "AG_ENFOR",
                 "REL_CONJ", "REL_EXCON", "REL_PAI", "REL_MAE",
-                "AUTOR_DROGA", "VIOL_REPET",
+                "AUTOR_ALCO", "OUT_VEZES",
                 "age_group",
             ],
             target_col="risco_autoprovocada",
@@ -41,7 +41,7 @@ class ViolenciaAutoprovocada(OutcomeConfig):
         df = viol_prep.preprocess(data["SINAN_VIOL"])
         # Remover consequências do target para evitar leakage parcial
         df = df.drop(columns=["CONS_DST", "CONS_GRAV", "CONS_MENT", "CONS_COMP",
-                               "CONS_ESTRE", "CONS_SUIC", "VIOL_AUTO"], errors="ignore")
+                               "CONS_ESTRE", "CONS_SUIC", "VIOL_AUTO", "LES_AUTOP"], errors="ignore")
         return df
 
     def build_features(self, cohort: pd.DataFrame) -> pd.DataFrame:

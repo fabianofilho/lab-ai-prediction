@@ -222,25 +222,97 @@ def _filter_national(df: pd.DataFrame, cfg: dict, state: str) -> pd.DataFrame:
 
 # ── DBC → DataFrame ──────────────────────────────────────────────────────────
 
-def _dbc_to_df(dbc_bytes: bytes, max_rows: int | None = None) -> pd.DataFrame:
+def _make_tolerant_parser():
+    """Constrói um dbfread FieldParser que tolera valores inválidos do DataSUS.
+
+    Os DBFs do DataSUS usam sentinelas como '****'/'********' em campos de
+    data (D) e caracteres não-numéricos em campos numéricos (N/F). O parser
+    padrão do dbfread levanta ValueError e aborta a leitura do arquivo inteiro.
+    Aqui devolvemos None nesses casos para que a linha seja preservada.
+    """
+    import dbfread
+
+    class TolerantFieldParser(dbfread.FieldParser):
+        def parseD(self, field, data):
+            try:
+                return super().parseD(field, data)
+            except (ValueError, TypeError):
+                return None
+
+        def parseN(self, field, data):
+            try:
+                return super().parseN(field, data)
+            except (ValueError, TypeError):
+                return None
+
+        def parseF(self, field, data):
+            try:
+                return super().parseF(field, data)
+            except (ValueError, TypeError):
+                return None
+
+    return TolerantFieldParser
+
+
+def _dbc_to_df(
+    dbc_bytes: bytes,
+    max_rows: int | None = None,
+    uf_col: str | None = None,
+    uf_code: str | None = None,
+    scan_cap: int = 3_000_000,
+) -> pd.DataFrame:
     """Decompress DBC bytes → DataFrame via datasus-dbc + dbfread.
 
-    max_rows: if set, stop reading after this many records (prevents OOM for
+    max_rows: if set, stop after this many KEPT records (prevents OOM for
     large files like SIH SP which can exceed 1 GB when fully loaded).
+
+    uf_col/uf_code: when both set (arquivos SINAN national), filtra a UF
+    durante o streaming. Isso aplica max_rows às linhas JÁ filtradas, evitando
+    o bug em que o corte por max_rows ocorria ANTES do filtro de UF e devolvia
+    0 linhas para UFs que aparecem tarde no arquivo nacional (ex.: SP no
+    DENGBR23.dbc só surge após ~139k registros). scan_cap limita a varredura
+    para UFs com poucos registros não lerem o arquivo inteiro.
     """
     from datasus_dbc import decompress_bytes
     import dbfread
 
     dbf_bytes = decompress_bytes(dbc_bytes)
+    parser = _make_tolerant_parser()
     with tempfile.NamedTemporaryFile(suffix=".dbf", delete=False) as f:
         f.write(dbf_bytes)
         tmp = Path(f.name)
     try:
+        dbf = dbfread.DBF(
+            str(tmp), encoding="latin-1",
+            parserclass=parser, ignore_missing_memofile=True,
+        )
+        target = None
+        if uf_col and uf_code:
+            try:
+                target = int(uf_code)
+            except (ValueError, TypeError):
+                target = None
+        if target is not None:
+            records = []
+            scanned = 0
+            for rec in dbf:
+                scanned += 1
+                v = rec.get(uf_col)
+                try:
+                    if v is not None and int(float(str(v).strip())) == target:
+                        records.append(rec)
+                        if max_rows and len(records) >= max_rows:
+                            break
+                except (ValueError, TypeError):
+                    pass
+                if scanned >= scan_cap:
+                    break
+            return pd.DataFrame(records)
         if max_rows is None:
-            records = list(dbfread.DBF(str(tmp), encoding="latin-1"))
+            records = list(dbf)
         else:
             records = []
-            for rec in dbfread.DBF(str(tmp), encoding="latin-1"):
+            for rec in dbf:
                 records.append(rec)
                 if len(records) >= max_rows:
                     break
@@ -309,13 +381,17 @@ def _try_http_annual(system: str, state: str, year: int, max_rows: int | None = 
 
     # Systems with multiple candidate paths (SINAN_DENG, SINAN_HANS, etc.)
     if "http_paths" in cfg:
+        national = cfg.get("national")
+        uf_col = cfg.get("uf_col") if national else None
+        uf_code = UF_CODE.get(state.upper()) if national else None
         for http_dir in cfg["http_paths"]:
             raw = _http_get(http_dir, filename)
             if raw:
-                df = _dbc_to_df(raw, max_rows=max_rows)
-                if cfg.get("national"):
+                df = _dbc_to_df(raw, max_rows=max_rows, uf_col=uf_col, uf_code=uf_code)
+                if national and not (uf_col and uf_code):
                     df = _filter_national(df, cfg, state)
-                return df
+                if df is not None and len(df) > 0:
+                    return df
         return None
 
     # SINAN_TB year-dependent path
@@ -324,10 +400,13 @@ def _try_http_annual(system: str, state: str, year: int, max_rows: int | None = 
     else:
         http_dir = cfg["http_path"]
 
+    national = cfg.get("national")
+    uf_col = cfg.get("uf_col") if national else None
+    uf_code = UF_CODE.get(state.upper()) if national else None
     raw = _http_get(http_dir, filename)
     if raw:
-        df = _dbc_to_df(raw, max_rows=max_rows)
-        if cfg.get("national"):
+        df = _dbc_to_df(raw, max_rows=max_rows, uf_col=uf_col, uf_code=uf_code)
+        if national and not (uf_col and uf_code):
             df = _filter_national(df, cfg, state)
         return df
     return None
@@ -369,13 +448,17 @@ def _try_ftp_annual(system: str, state: str, year: int, max_rows: int | None = N
 
     # Systems with multiple candidate paths
     if "ftp_paths" in cfg:
+        national = cfg.get("national")
+        uf_col = cfg.get("uf_col") if national else None
+        uf_code = UF_CODE.get(state.upper()) if national else None
         for ftp_dir in cfg["ftp_paths"]:
             raw = _ftp_get(ftp_dir, filename)
             if raw:
-                df = _dbc_to_df(raw, max_rows=max_rows)
-                if cfg.get("national"):
+                df = _dbc_to_df(raw, max_rows=max_rows, uf_col=uf_col, uf_code=uf_code)
+                if national and not (uf_col and uf_code):
                     df = _filter_national(df, cfg, state)
-                return df
+                if df is not None and len(df) > 0:
+                    return df
         return None
 
     # SINAN_TB year-dependent path
@@ -384,10 +467,13 @@ def _try_ftp_annual(system: str, state: str, year: int, max_rows: int | None = N
     else:
         ftp_dir = cfg["ftp_path"]
 
+    national = cfg.get("national")
+    uf_col = cfg.get("uf_col") if national else None
+    uf_code = UF_CODE.get(state.upper()) if national else None
     raw = _ftp_get(ftp_dir, filename)
     if raw:
-        df = _dbc_to_df(raw, max_rows=max_rows)
-        if cfg.get("national"):
+        df = _dbc_to_df(raw, max_rows=max_rows, uf_col=uf_col, uf_code=uf_code)
+        if national and not (uf_col and uf_code):
             df = _filter_national(df, cfg, state)
         return df
     return None

@@ -20,11 +20,11 @@ KEEP_COLS = [
     # Signs/symptoms (selected)
     "FEBRE", "MIALGIA", "CEFALEIA", "EXANTEMA", "VOMITO",
     "NAUSEA", "DOR_COSTAS", "CONJUNTVIT", "ARTRITE",
-    # Warning signs
-    "PETEQUIA_N", "LEUCOPENIA", "DOR_ABDOM", "VOMITO_2",
-    "SANG_MUC", "VERTIG", "PRESSAO",
-    # Severe dengue
-    "CHOQUE", "CONVULSAO", "HEPATOPAT", "INSUF_RESP",
+    # Warning signs (layout >=2014: familia ALRM_*)
+    "PETEQUIA_N", "LEUCOPENIA", "ALRM_ABDOM", "ALRM_VOM",
+    "ALRM_SANG", "ALRM_LETAR", "ALRM_HIPOT",
+    # Severe dengue (familia GRAV_*)
+    "GRAV_HIPOT", "GRAV_CONV", "HEPATOPAT", "GRAV_INSUF",
 ]
 
 # CLASSI_FIN codes
@@ -54,9 +54,9 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     bool_cols = [
         "FEBRE", "MIALGIA", "CEFALEIA", "EXANTEMA", "VOMITO",
         "NAUSEA", "DOR_COSTAS", "CONJUNTVIT", "ARTRITE",
-        "PETEQUIA_N", "LEUCOPENIA", "DOR_ABDOM", "VOMITO_2",
-        "SANG_MUC", "VERTIG", "PRESSAO",
-        "CHOQUE", "CONVULSAO", "HEPATOPAT", "INSUF_RESP",
+        "PETEQUIA_N", "LEUCOPENIA", "ALRM_ABDOM", "ALRM_VOM",
+        "ALRM_SANG", "ALRM_LETAR", "ALRM_HIPOT",
+        "GRAV_HIPOT", "GRAV_CONV", "HEPATOPAT", "GRAV_INSUF",
     ]
     for col in bool_cols:
         if col in df.columns:

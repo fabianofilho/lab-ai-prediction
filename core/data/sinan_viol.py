@@ -10,7 +10,8 @@ KEEP_COLS = [
     # Tipo de violência
     "VIOL_FISIC", "VIOL_PSICO", "VIOL_TORT", "VIOL_SEXU",
     "VIOL_TRAF", "VIOL_FINAN", "VIOL_NEGLI", "VIOL_INFAN",
-    "VIOL_AUTO",   # autoprovocada (autoinfligida)
+    "VIOL_AUTO",   # autoprovocada (autoinfligida) - ausente em anos recentes
+    "LES_AUTOP",   # lesao autoprovocada (1=sim) - campo real no DBF 2023+
     # Agente
     "AG_FORCA", "AG_ENFOR", "AG_CORTE", "AG_QUENTE",
     "AG_ENVEN", "AG_FOGO", "AG_AMEACA",
@@ -18,7 +19,7 @@ KEEP_COLS = [
     "SEX_ASSEDI", "SEX_ESTUPR",
     # Agressor
     "REL_PAI", "REL_MAE", "REL_CONJ", "REL_EXCON", "REL_NAMO",
-    "REL_POL", "AUTOR_SEXO", "AUTOR_DROGA",
+    "REL_POL", "AUTOR_SEXO", "AUTOR_ALCO",
     # Consequências
     "CONS_SUIC", "CONS_DST", "CONS_GRAV", "CONS_MENT",
     "CONS_COMP", "CONS_ESTRE",
@@ -28,7 +29,7 @@ KEEP_COLS = [
     # Local/circunstância
     "LOCAL_OCOR", "HORA_OCOR",
     # Repetição
-    "VIOL_REPET",
+    "OUT_VEZES",
 ]
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
@@ -49,21 +50,28 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
         "AG_ENVEN", "AG_FOGO", "AG_AMEACA",
         "SEX_ASSEDI", "SEX_ESTUPR",
         "REL_PAI", "REL_MAE", "REL_CONJ", "REL_EXCON", "REL_NAMO",
-        "REL_POL", "AUTOR_DROGA",
+        "REL_POL", "AUTOR_ALCO",
         "CONS_SUIC", "CONS_DST", "CONS_GRAV", "CONS_MENT",
         "CONS_COMP", "CONS_ESTRE",
         "ENC_SAUDE", "ENC_TUTELA", "ENC_DEAM", "ENC_DELEG",
         "ENC_CREAS", "ENC_IML",
-        "VIOL_REPET",
+        "OUT_VEZES",
     ]
     for col in bool_cols:
         if col in df.columns:
             df[col] = (df[col].astype(str).str.strip().str.replace(r'\.0$', '', regex=True) == "1").astype(int)
 
-    # Target: consequência de suicídio ou violência autoprovocada
-    suic = df.get("CONS_SUIC", pd.Series(0, index=df.index))
-    auto = df.get("VIOL_AUTO", pd.Series(0, index=df.index))
-    df["risco_autoprovocada"] = ((suic == 1) | (auto == 1)).astype(int)
+    # Target: lesão autoprovocada (LES_AUTOP==1, campo real do SINAN-Violência)
+    # ou consequência suicida / violência autoprovocada (fallback p/ outros anos).
+    def _is_one(name):
+        if name not in df.columns:
+            return pd.Series(0, index=df.index)
+        return (df[name].astype(str).str.strip()
+                .str.replace(r'\.0$', '', regex=True) == "1").astype(int)
+    les  = _is_one("LES_AUTOP")
+    suic = _is_one("CONS_SUIC")
+    auto = _is_one("VIOL_AUTO")
+    df["risco_autoprovocada"] = ((les == 1) | (suic == 1) | (auto == 1)).astype(int)
 
     for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "ORIENT_SEX", "IDENT_GEN"]:
         if col in df.columns:

@@ -30,7 +30,7 @@ class AbandonoTB(OutcomeConfig):
                 "idade_anos", "CS_SEXO", "CS_RACA", "CS_ESCOL_N",
                 "FORMA", "BACILOSC_E", "CULTURA_ES",
                 "hiv_pos", "AGRAVAIDS",
-                "dot", "TP_INFECC",
+                "dot", "TRATAMENTO",
                 "RAIOX_TORA",
                 "age_group",
             ],
@@ -52,7 +52,7 @@ class AbandonoTB(OutcomeConfig):
         # Categoricals
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "FORMA",
                     "BACILOSC_E", "CULTURA_ES", "AGRAVAIDS",
-                    "TP_INFECC", "RAIOX_TORA"]:
+                    "TRATAMENTO", "RAIOX_TORA"]:
             if col in df.columns:
                 df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
 

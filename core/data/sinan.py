@@ -26,7 +26,7 @@ KEEP_COLS = [
     "AGRAVAIDS",           # AIDS complication
     "TRAT_SUPER",          # directly observed treatment (DOT)
     "SITUA_ENCE",          # case closure situation: 1=cure,2=death,3=abandon,5=transfer
-    "TP_INFECC",           # infection type (new/retreatment)
+    "TRATAMENTO",          # entry type (1=new case, 2=relapse, 3=re-entry after abandonment, ...)
     "RAIOX_TORA",          # chest X-ray result
     # Identifiers
     "NM_PACIENT",

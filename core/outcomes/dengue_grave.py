@@ -30,7 +30,7 @@ class DengueGrave(OutcomeConfig):
                 "idade_anos", "CS_SEXO", "CS_RACA", "CS_ESCOL_N",
                 "FEBRE", "MIALGIA", "CEFALEIA", "EXANTEMA", "VOMITO",
                 "NAUSEA", "DOR_COSTAS", "PETEQUIA_N", "LEUCOPENIA",
-                "DOR_ABDOM", "VOMITO_2", "SANG_MUC", "VERTIG",
+                "ALRM_ABDOM", "ALRM_VOM", "ALRM_SANG", "ALRM_LETAR",
                 "hospitalizado", "age_group",
             ],
             target_col="dengue_grave",
