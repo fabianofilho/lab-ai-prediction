@@ -735,14 +735,6 @@ if ss["cohort"] is None:
             ss["raw_data"] = {"UPLOAD": ss["upload_df"]}
             st.rerun()
 
-        # Upload-status outcomes with no raw_data → redirect to upload page
-        _UPLOAD_KEYS = {
-            "dengue_grave", "chikungunya_hospitalizado",
-            "obito_aids", "sifilis_nao_cura", "intoxicacao_grave",
-        }
-        if ss["outcome_key"] in _UPLOAD_KEYS and not _is_diy:
-            st.switch_page("pages/upload.py")
-
         step_title(2, "Dados",
                    f"Fontes necessárias para este desfecho: {', '.join(outcome.data_sources)}")
 
