@@ -44,7 +44,10 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 
 ---
 
-## DATASUS — 16 desfechos prontos
+## DATASUS — 17 desfechos
+
+Download automático com cache local. Status `ok` = pipeline pronto ponta a ponta;
+`dev` = requer identificador de paciente indisponível no dado público.
 
 ### Saúde Materno-Infantil (SINASC, SIM)
 | Desfecho | Fonte | Status |
@@ -52,15 +55,16 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 | Baixo Peso ao Nascer | SINASC | ok |
 | Prematuridade | SINASC | ok |
 | Apgar Baixo no 5º Minuto | SINASC | ok |
-| Mortalidade Neonatal | SINASC + SIM | dev |
+| Mortalidade Neonatal | SINASC + SIM | ok |
 
 ### Internação Hospitalar (SIH, SIM)
 | Desfecho | Fonte | Status |
 |---|---|---|
+| Readmissão Hospitalar 30 dias | SIH | dev |
 | Permanência Hospitalar Prolongada | SIH | ok |
 | Infecção Hospitalar | SIH | ok |
 | Custo Hospitalar Elevado | SIH | ok |
-| Mortalidade Hospitalar | SIH + SIM | dev |
+| Mortalidade Hospitalar | SIH + SIM | ok |
 
 ### SINAN
 | Desfecho | Fonte | Status |
@@ -68,11 +72,14 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 | Abandono de Tratamento TB | SINAN | ok |
 | Abandono de Tratamento — Hanseníase | SINAN | ok |
 | Risco de Violência Autoprovocada | SINAN | ok |
-| Dengue Grave / Sinais de Alarme | SINAN | upload |
-| Hospitalização por Chikungunya | SINAN | upload |
-| Óbito por AIDS | SINAN | upload |
-| Não-Cura de Sífilis Adquirida | SINAN | upload |
-| Desfecho Adverso em Intoxicação Exógena | SINAN | upload |
+| Dengue Grave / Sinais de Alarme | SINAN | ok |
+| Hospitalização por Chikungunya | SINAN | ok |
+| Óbito por AIDS | SINAN | ok |
+| Não-Cura de Sífilis Adquirida | SINAN | ok |
+| Desfecho Adverso em Intoxicação Exógena | SINAN | ok |
+
+> Os arquivos SINAN são nacionais e filtrados por UF durante a leitura. Dengue é o
+> maior arquivo, então o primeiro download é mais lento (cacheado depois).
 
 ---
 
