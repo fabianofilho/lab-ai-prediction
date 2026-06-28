@@ -401,15 +401,20 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .sb-step-value {
   font-size: .78rem; color: var(--fg); font-weight: 500; line-height: 1.35;
 }
-/* botão "i" de metodologia na sidebar: círculo discreto */
+/* botão "i" de metodologia na sidebar: círculo minimalista (quadrado fixo) */
+[class*="st-key-sb_methodology"] { width: 26px !important; min-width: 0 !important; flex: 0 0 auto !important; }
+[class*="st-key-sb_methodology"] [data-testid="stButton"] { width: 26px !important; min-width: 0 !important; }
 [class*="st-key-sb_methodology"] button {
-  border-radius: 50% !important;
-  width: 30px !important; height: 30px !important;
-  min-width: 30px !important; padding: 0 !important;
+  width: 26px !important; height: 26px !important;
+  min-width: 26px !important; max-width: 26px !important;
+  min-height: 26px !important; max-height: 26px !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 50% !important; padding: 0 !important;
   font-family: Georgia, "Times New Roman", serif !important;
-  font-style: italic !important; font-weight: 700 !important;
-  color: #6b7280 !important; border: 1px solid #d1d5db !important;
-  background: #ffffff !important; line-height: 1 !important;
+  font-style: italic !important; font-weight: 600 !important;
+  font-size: .8rem !important;
+  color: #9ca3af !important; border: 1px solid #e5e7eb !important;
+  background: transparent !important; line-height: 1 !important;
 }
 [class*="st-key-sb_methodology"] button:hover {
   color: #223886 !important; border-color: #223886 !important; background: #eef1fb !important;
