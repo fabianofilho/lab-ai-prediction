@@ -38,7 +38,7 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 
 | Frente | Quando usar |
 |---|---|
-| **DATASUS** | Quer um dos 16 desfechos prontos sobre microdados brasileiros (SIH, SIM, SINASC, SINAN) com download automático |
+| **DATASUS** | Quer um dos 22 desfechos prontos sobre microdados brasileiros (SIH, SIM, SINASC, SINAN) com download automático |
 | **DIY** | Tem a sua própria base tabular em CSV ou Parquet e quer rodar o pipeline nela |
 | **BENCHMARKS** | Quer comparar performance em datasets clássicos abertos (UCI, PhysioNet) curados do [awesome-health-datasets](https://github.com/fabianofilho/awesome-health-datasets) |
 
@@ -113,7 +113,7 @@ Adicionar mais benchmarks: implemente um loader em `core/data/benchmarks/<nome>.
 lab-ai-prediction/
 ├── app.py                        # Home: 3 cards (DATASUS / DIY / BENCHMARKS)
 ├── pages/
-│   ├── datasus.py                # Catálogo de 16 desfechos DATASUS
+│   ├── datasus.py                # Catálogo de 22 desfechos DATASUS
 │   ├── benchmarks.py             # Catálogo de datasets externos
 │   ├── upload.py                 # Fluxo DIY (upload CSV/Parquet)
 │   ├── analise.py                # Wizard completo de 10 etapas
