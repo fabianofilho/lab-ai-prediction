@@ -9,11 +9,13 @@ from core.data import sih as sih_prep
 from core.features import engineering as eng
 
 # Colunas que vazam o alvo (derivadas direta ou indiretamente do uso de UTI)
+# VAL_TOT entra aqui porque o valor total da AIH SOMA o VAL_UTI: custo alto
+# implica UTI usada (vazamento matemático, corr ~0.71 com o alvo).
 _LEAKY_COLS = [
     "UTI_MES_TO", "UTI_INT_TO", "VAL_UTI", "used_icu", "MARCA_UTI",
     "UTI_MES_IN", "UTI_MES_AN", "UTI_MES_AL",
     "UTI_INT_IN", "UTI_INT_AN", "UTI_INT_AL",
-    "VAL_UCI", "MARCA_UCI", "VAL_UTI_FED",
+    "VAL_UCI", "MARCA_UCI", "VAL_UTI_FED", "VAL_TOT",
 ]
 
 
@@ -37,7 +39,7 @@ class UsoUTI(OutcomeConfig):
             estimated_download_min=10,
             suggested_features=[
                 "IDADE", "SEXO", "diag_chapter", "diag_block",
-                "length_of_stay_days", "CAR_INT", "VAL_TOT", "RACA_COR",
+                "length_of_stay_days", "CAR_INT", "RACA_COR",
                 "PROC_REA", "age_group",
             ],
             target_col="uso_uti",

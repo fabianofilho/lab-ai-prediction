@@ -43,8 +43,9 @@ METHODOLOGY: dict[str, dict] = {
         "target": "Internação com mais de 15 dias de permanência.",
     },
     "uso_uti": {
-        "pull": "Base SIH-RD do estado/ano (mensal e pesada; use estados menores ou max_rows controlado). Todas as colunas de UTI (UTI_MES_TO, VAL_UTI, MARCA_UTI, etc.) saem das preditoras.",
-        "target": "A internação utilizou UTI, derivado de UTI_MES_TO > 0 (dias-UTI no mês). Features de admissão: idade, sexo, CID principal (capítulo/bloco), permanência, caráter da internação, valor total, raça e procedimento.",
+        "pull": "Base SIH-RD do estado/ano (mensal e pesada; use estados menores ou max_rows controlado). Todas as colunas de UTI (UTI_MES_TO, VAL_UTI, MARCA_UTI, etc.) E o VAL_TOT saem das preditoras: o valor total da AIH soma o custo de UTI, então seria vazamento.",
+        "target": "A internação utilizou UTI, derivado de UTI_MES_TO > 0 (dias-UTI no mês). Features de admissão: idade, sexo, CID principal (capítulo/bloco), permanência, caráter da internação, raça e procedimento realizado.",
+        "caveat": "VAL_TOT foi excluído por conter o custo de UTI (vazamento). O procedimento (PROC_REA) é o preditor dominante.",
     },
     "infeccao_hospitalar": {
         "pull": "Base SIH-RD do estado/ano. O campo oficial de infecção hospitalar vem vazio no dado público, então usa-se um proxy.",
