@@ -74,9 +74,18 @@ METHODOLOGY: dict[str, dict] = {
         "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados (situação de encerramento conhecida).",
         "target": "Encerramento por abandono de tratamento (SITUA_ENCE = abandono).",
     },
+    "obito_tb": {
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
+        "target": "Óbito ao encerramento do caso (SITUA_ENCE = 2, por TB ou outra causa). Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
+    },
     "abandono_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos encerrados.",
         "target": "Saída por abandono de tratamento (TPALTA_N = 3).",
+    },
+    "incapacidade_hanseniase": {
+        "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). AVALIA_N/grau_incapacidade (fonte do alvo) e colunas pós-tratamento (TPALTA_N, doses) saem das preditoras.",
+        "target": "Incapacidade física grau 2 (G2D) ao diagnóstico (AVALIA_N = 2), indicador de detecção tardia monitorado pela OMS. Features: forma clínica, classificação operacional, modo de detecção, baciloscopia, tempo notificação-diagnóstico e demografia.",
+        "caveat": "Desfecho moderadamente desbalanceado; AUC modesta (~0,65) por ser predição de detecção tardia a partir de características de base.",
     },
     "dengue_grave": {
         "pull": "Base SINAN-Dengue (nacional, filtrada por UF; arquivo grande, 1º download mais lento). CLASSI_FIN sai das preditoras; sinais de alarme ALRM_* entram como features.",

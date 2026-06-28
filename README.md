@@ -44,7 +44,7 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 
 ---
 
-## DATASUS — 20 desfechos
+## DATASUS — 22 desfechos
 
 Download automático com cache local. Todos os desfechos têm pipeline pronto
 ponta a ponta. Os que dependem de pareamento entre registros usam linkage
@@ -76,7 +76,9 @@ lateral explicando como o dado é puxado e como o desfecho é derivado.
 | Desfecho | Fonte | Status |
 |---|---|---|
 | Abandono de Tratamento TB | SINAN | ok |
+| Óbito em Tuberculose | SINAN | ok |
 | Abandono de Tratamento — Hanseníase | SINAN | ok |
+| Incapacidade Grau 2 — Hanseníase | SINAN | ok (G2D, indicador OMS) |
 | Risco de Violência Autoprovocada | SINAN | ok |
 | Dengue Grave / Sinais de Alarme | SINAN | ok |
 | Hospitalização por Chikungunya | SINAN | ok |

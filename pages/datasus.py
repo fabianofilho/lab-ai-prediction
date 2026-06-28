@@ -62,9 +62,15 @@ OUTCOME_GROUPS = {
         {"key": "abandono_tb", "icon": "pulmonology", "name": "Abandono de Tratamento TB",
          "source": "SINAN", "est_min": 8, "status": "ok", "linkage": None,
          "note": "Base única SINAN_TB. Pipeline completo disponível."},
+        {"key": "obito_tb", "icon": "sentiment_very_dissatisfied", "name": "Óbito em Tuberculose",
+         "source": "SINAN", "est_min": 8, "status": "ok", "linkage": None,
+         "note": "Base única SINAN_TB. Óbito ao encerramento do caso."},
         {"key": "abandono_hanseniase", "icon": "stethoscope", "name": "Abandono de Tratamento — Hanseníase",
          "source": "SINAN", "est_min": 5, "status": "ok", "linkage": None,
          "note": "Base única SINAN_HANS. Pipeline completo disponível."},
+        {"key": "incapacidade_hanseniase", "icon": "accessible", "name": "Incapacidade Grau 2 — Hanseníase",
+         "source": "SINAN", "est_min": 5, "status": "ok", "linkage": None,
+         "note": "Base única SINAN_HANS. G2D ao diagnóstico (indicador OMS de detecção tardia)."},
         {"key": "violencia_autoprovocada", "icon": "psychology", "name": "Risco de Violência Autoprovocada",
          "source": "SINAN", "est_min": 10, "status": "ok", "linkage": None,
          "note": "Base única SINAN_VIOL. Pipeline completo disponível."},
@@ -317,7 +323,6 @@ try:
                 source = o["source"]
                 status = o["status"]
                 est    = o["est_min"]
-                linkage = o["linkage"]
                 note   = o["note"]
                 is_sel = sel == key
 

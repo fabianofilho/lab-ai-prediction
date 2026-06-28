@@ -61,6 +61,7 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
         situacao = df["SITUA_ENCE"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         df["abandono"] = (situacao == SITUA_ABANDONO).astype(int)
         df["cura"] = (situacao == SITUA_CURA).astype(int)
+        df["obito_tb"] = (situacao == SITUA_OBITO).astype(int)
 
     # DOT (tratamento supervisionado)
     if "TRAT_SUPER" in df.columns:

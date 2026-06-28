@@ -138,6 +138,24 @@ _REGISTRY: dict[str, dict] = {
         "icon": "stethoscope",
         "estimated_download_min": 5,
     },
+    "obito_tb": {
+        "module": "core.outcomes.obito_tb",
+        "class":  "ObitoTB",
+        "name":   "Óbito em Tuberculose",
+        "description": "Prediz óbito ao encerramento do caso de tuberculose (SINAN-TB).",
+        "data_sources": ["SINAN_TB"],
+        "icon": "sentiment_very_dissatisfied",
+        "estimated_download_min": 8,
+    },
+    "incapacidade_hanseniase": {
+        "module": "core.outcomes.incapacidade_hanseniase",
+        "class":  "IncapacidadeHanseniase",
+        "name":   "Incapacidade Grau 2 — Hanseníase",
+        "description": "Prediz incapacidade física grau 2 (G2D) ao diagnóstico de hanseníase (indicador OMS).",
+        "data_sources": ["SINAN_HANS"],
+        "icon": "accessible",
+        "estimated_download_min": 5,
+    },
     # Arboviroses
     "dengue_grave": {
         "module": "core.outcomes.dengue_grave",
@@ -216,7 +234,9 @@ OUTCOME_GROUPS: dict[str, list[str]] = {
     ],
     "Tuberculose e Hanseníase": [
         "abandono_tb",
+        "obito_tb",
         "abandono_hanseniase",
+        "incapacidade_hanseniase",
     ],
     "Arboviroses": [
         "dengue_grave",
