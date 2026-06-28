@@ -121,6 +121,26 @@ h1,h2,h3,h4,h5,h6 { font-family:"Space Grotesk","Inter",sans-serif !important; l
 }
 .home-card-meta .ms { font-size: .9rem; color: #9ca3af; }
 
+/* ── BenchLab strip ───────────────────────────────────────── */
+.bl-strip {
+    background: #223886;
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin: 2rem 0 0;
+    display: flex; align-items: center; gap: 1rem;
+}
+.bl-strip .ms { font-size: 1.5rem; color: #9ec83b; flex-shrink: 0; }
+.bl-strip-title {
+    font-family: "Space Grotesk", "Inter", sans-serif;
+    font-size: .95rem; font-weight: 700;
+    color: #ffffff !important;
+    letter-spacing: .08em; margin: 0 0 .2rem;
+}
+.bl-strip-sub {
+    font-size: .8rem; color: rgba(255,255,255,.7) !important;
+    margin: 0; line-height: 1.45;
+}
+
 /* ── Botão dentro do card ──────────────────────────────────── */
 div[data-testid="stButton"] { display: flex !important; justify-content: flex-start !important; }
 div[data-testid="stButton"] > button {
@@ -171,6 +191,9 @@ st.markdown(
 # ── 3 Cards ───────────────────────────────────────────────────────────────────
 def _go_datasus():
     st.switch_page("pages/datasus.py")
+
+def _go_benchlab():
+    st.switch_page("pages/benchlab.py")
 
 
 def _go_diy():
@@ -234,6 +257,27 @@ for col, card in zip(cols, CARDS):
         if st.button(card["btn"], key=f"home_{card['title'].lower()}", type="primary", use_container_width=True):
             card["go"]()
 
+
+# ── BenchLab strip ───────────────────────────────────────────────────────────
+_strip_l, _strip_r = st.columns([7, 2])
+with _strip_l:
+    st.markdown(
+        '<div class="bl-strip">'
+        '<span class="ms">bolt</span>'
+        '<div>'
+        '<p class="bl-strip-title">BENCHLAB</p>'
+        '<p class="bl-strip-sub">'
+        'Compare todos os algoritmos em todos os datasets de uma vez — '
+        'veja qual modelo performa melhor em dados brasileiros e internacionais.'
+        '</p>'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+with _strip_r:
+    st.markdown('<div style="margin-top:2rem"></div>', unsafe_allow_html=True)
+    if st.button("Abrir BenchLab", key="home_benchlab", type="primary", use_container_width=True):
+        _go_benchlab()
 
 # ── Rodapé ────────────────────────────────────────────────────────────────────
 st.markdown('<hr style="border:none;border-top:1px solid #f3f4f6;margin:3rem 0 1rem">', unsafe_allow_html=True)
