@@ -41,8 +41,12 @@ def parse(md: str) -> dict:
         h = _HEADER.match(line)
         if h:
             title = _clean_category(h.group(2))
-            # ignora seções utilitárias
-            if any(k in title.lower() for k in ("license", "licença", "contribu", "platforms", "repositor")):
+            # ignora seções utilitárias e a categoria brasileira (DATASUS já é a
+            # frente principal do app, seria redundante no catálogo de referência)
+            if any(k in title.lower() for k in (
+                "license", "licença", "contribu", "platforms", "repositor",
+                "brazilian", "brasil",
+            )):
                 current = None
             else:
                 current = title

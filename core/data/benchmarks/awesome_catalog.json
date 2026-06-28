@@ -249,18 +249,6 @@
       "desc": "Multilingual healthcare datasets covering medical diagnoses, disease names and health information in three languages (Zenodo, 2026)."
     }
   ],
-  "Brazilian Public Health Data": [
-    {
-      "name": "DATASUS / TABNET",
-      "url": "https://datasus.saude.gov.br/informacoes-de-saude-tabnet/",
-      "desc": "Official health information system of the Brazilian Ministry of Health."
-    },
-    {
-      "name": "Portal de Dados Abertos do SUS",
-      "url": "https://dadosabertos.saude.gov.br/",
-      "desc": "Open data portal for the Brazilian Unified Health System (SUS)."
-    }
-  ],
   "Epidemiology & General Health": [
     {
       "name": "Pima Indians Diabetes Dataset",

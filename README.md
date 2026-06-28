@@ -105,7 +105,7 @@ Loaders prontos que aterrissam no mesmo pipeline DIY:
 | eICU-CRD Demo | PhysioNet | externo (catálogo) |
 | PTB-XL ECG | PhysioNet | externo (catálogo) |
 
-A aba também mostra um **catálogo completo de referência** (51 datasets em 12 categorias)
+A aba também mostra um **catálogo completo de referência** (49 datasets em 11 categorias)
 curado do [awesome-health-datasets](https://github.com/fabianofilho/awesome-health-datasets).
 Atualize com `python scripts/sync_awesome_catalog.py`.
 
