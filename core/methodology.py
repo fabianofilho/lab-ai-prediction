@@ -8,7 +8,9 @@ Cada entrada descreve:
 """
 from __future__ import annotations
 
-import streamlit as st
+# NB: streamlit é importado de forma tardia dentro de show_methodology para que
+# o dicionário METHODOLOGY (dado puro) possa ser importado sem streamlit — útil
+# para os testes offline de CI.
 
 METHODOLOGY: dict[str, dict] = {
     "baixo_peso_nascer": {
@@ -123,13 +125,24 @@ div[data-testid="stDialog"] div[role="dialog"] h4 { color: #223886 !important; m
 """
 
 
-@st.dialog("Metodologia")
 def show_methodology(outcome_key: str):
-    """Drawer lateral (direita) com a metodologia de obtenção do dado do desfecho.
+    """Abre o drawer lateral (direita) com a metodologia do desfecho.
 
-    Reutilizável no grid DATASUS e no pipeline (sidebar). Puxa nome/fonte/features
-    do registro de OUTCOMES e o texto da metodologia deste módulo.
+    Reutilizável no grid DATASUS e no pipeline (sidebar). O `st.dialog` é aplicado
+    aqui (import tardio) para não exigir streamlit ao importar o módulo.
     """
+    import streamlit as st
+
+    @st.dialog("Metodologia")
+    def _dialog():
+        _render_methodology(outcome_key)
+
+    _dialog()
+
+
+def _render_methodology(outcome_key: str):
+    import streamlit as st
+
     st.markdown(_DRAWER_CSS, unsafe_allow_html=True)
     meth = METHODOLOGY.get(outcome_key, {})
 
