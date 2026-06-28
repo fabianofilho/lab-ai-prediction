@@ -205,13 +205,13 @@ CARDS = [
         "go":    _go_diy,
     },
     {
-        "tag":   "Datasets abertos",
+        "tag":   "Datasets internacionais",
         "icon":  "analytics",
-        "title": "BENCHMARKS",
+        "title": "MUNDO",
         "desc":  "Datasets clássicos de saúde (UCI, PhysioNet) prontos para "
-                 "comparar performance internacionalmente.",
+                 "rodar o mesmo pipeline em referências internacionais.",
         "meta":  "Pima, Heart UCI e mais • ~1 min",
-        "btn":   "Ver benchmarks",
+        "btn":   "Ver datasets",
         "go":    _go_benchmarks,
     },
 ]

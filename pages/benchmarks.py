@@ -160,7 +160,7 @@ with _back_col:
 st.markdown(
     '<p class="ds-title">'
     '<span class="ms ms-lg">analytics</span>'
-    'BENCHMARKS'
+    'MUNDO'
     '</p>',
     unsafe_allow_html=True,
 )
