@@ -226,3 +226,45 @@ for group_name, benches in BENCHMARK_GROUPS.items():
                             _go_benchmark(b.key)
                 else:
                     st.link_button("Abrir fonte", b.url, use_container_width=True)
+
+
+# ── Catálogo completo (awesome-health-datasets) ───────────────────────────────
+import json as _json
+from pathlib import Path as _Path
+
+_CATALOG_PATH = _Path(__file__).parent.parent / "core" / "data" / "benchmarks" / "awesome_catalog.json"
+
+
+@st.cache_data(show_spinner=False)
+def _load_catalog() -> dict:
+    try:
+        return _json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+_catalog = _load_catalog()
+if _catalog:
+    _total = sum(len(v) for v in _catalog.values())
+    st.markdown('<p class="ds-group">Catálogo completo — referência</p>', unsafe_allow_html=True)
+    st.markdown(
+        f'<p style="font-size:.8rem;color:#6b7280;margin:-.5rem 0 1rem">'
+        f'{_total} datasets de saúde abertos curados no '
+        f'<a href="https://github.com/fabianofilho/awesome-health-datasets" target="_blank" '
+        f'style="color:#223886;text-decoration:none;border-bottom:1px dotted #223886">awesome-health-datasets</a>, '
+        f'agrupados por categoria. Apenas referência: imaging, sinais, NLP e genômica não rodam no '
+        f'pipeline tabular. Atualize com <code>python scripts/sync_awesome_catalog.py</code>.'
+        f'</p>',
+        unsafe_allow_html=True,
+    )
+    for _cat, _items in _catalog.items():
+        with st.expander(f"{_cat}  ({len(_items)})", expanded=False):
+            _html = "".join(
+                '<div style="font-size:.82rem;margin:.3rem 0;line-height:1.45">'
+                f'<a href="{_it["url"]}" target="_blank" '
+                f'style="color:#223886;font-weight:600;text-decoration:none">{_it["name"]}</a>'
+                + (f' <span style="color:#6b7280">— {_it["desc"]}</span>' if _it.get("desc") else "")
+                + '</div>'
+                for _it in _items
+            )
+            st.markdown(_html, unsafe_allow_html=True)

@@ -33,6 +33,8 @@ class Benchmark:
 
 from .pima import load as _load_pima, DICT_META as _PIMA_DICT
 from .heart import load as _load_heart, DICT_META as _HEART_DICT
+from .heart_failure import load as _load_hf, DICT_META as _HF_DICT
+from .breast_cancer import load as _load_bc, DICT_META as _BC_DICT
 
 
 BENCHMARK_GROUPS: dict[str, list[Benchmark]] = {
@@ -62,6 +64,32 @@ BENCHMARK_GROUPS: dict[str, list[Benchmark]] = {
             target_col="target",
             loader=_load_heart,
             dict_meta=_HEART_DICT,
+        ),
+        Benchmark(
+            key="bench_heart_failure",
+            name="Heart Failure Clinical Records",
+            source="UCI",
+            icon="ecg_heart",
+            est_min=1,
+            status="ok",
+            note="299 pacientes com insuficiência cardíaca, 11 features clínicas, óbito no seguimento. Coluna 'time' removida (vazamento).",
+            url="https://archive.ics.uci.edu/dataset/519/heart+failure+clinical+records",
+            target_col="target",
+            loader=_load_hf,
+            dict_meta=_HF_DICT,
+        ),
+        Benchmark(
+            key="bench_breast_cancer",
+            name="Breast Cancer Wisconsin",
+            source="UCI / sklearn",
+            icon="oncology",
+            est_min=1,
+            status="ok",
+            note="569 amostras, 30 features de aspirado por agulha fina, maligno vs benigno. Embarcado no scikit-learn (sem download).",
+            url="https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic",
+            target_col="target",
+            loader=_load_bc,
+            dict_meta=_BC_DICT,
         ),
     ],
     "Cuidado intensivo (PhysioNet)": [

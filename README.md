@@ -99,9 +99,15 @@ Loaders prontos que aterrissam no mesmo pipeline DIY:
 |---|---|---|
 | Pima Indians Diabetes | UCI | pronto |
 | Heart Disease Cleveland | UCI | pronto |
+| Heart Failure Clinical Records | UCI | pronto |
+| Breast Cancer Wisconsin | UCI / sklearn | pronto |
 | MIMIC-IV Demo | PhysioNet | externo (catálogo) |
 | eICU-CRD Demo | PhysioNet | externo (catálogo) |
 | PTB-XL ECG | PhysioNet | externo (catálogo) |
+
+A aba também mostra um **catálogo completo de referência** (51 datasets em 12 categorias)
+curado do [awesome-health-datasets](https://github.com/fabianofilho/awesome-health-datasets).
+Atualize com `python scripts/sync_awesome_catalog.py`.
 
 Adicionar mais benchmarks: implemente um loader em `core/data/benchmarks/<nome>.py` que retorne um `DataFrame` com coluna alvo binária, e registre em `core/data/benchmarks/__init__.py`.
 
