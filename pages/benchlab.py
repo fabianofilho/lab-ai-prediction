@@ -21,6 +21,7 @@ st.set_page_config(
 st.markdown("""
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,300,0,0" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" />
+
 <style>
 header, footer,
 [data-testid="stSidebar"], [data-testid="stSidebarNav"],
@@ -29,76 +30,40 @@ header, footer,
 
 html, body, [data-testid="stAppViewContainer"],
 [data-testid="stMain"], .main, .block-container {
-    background-color: #ffffff !important;
-    color: #111827 !important;
+    background-color: #ffffff !important; color: #111827 !important;
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
 }
-.block-container { padding: 4.5rem 3rem 3rem !important; max-width: 1160px !important; }
+.block-container { padding: 3rem 3rem !important; max-width: 1200px !important; }
 
-.ms {
-    font-family: 'Material Symbols Outlined';
-    font-style: normal; font-weight: normal;
-    line-height: 1; display: inline-block; color: #111827;
-}
-h1,h2,h3,h4,h5,h6 { font-family:"Space Grotesk","Inter",sans-serif !important; }
+.ms { font-family: 'Material Symbols Outlined'; font-style: normal; font-weight: normal;
+    font-size: 1rem; line-height: 1; vertical-align: middle; display: inline-block; color: #111827; }
+.ms-lg { font-size: 1.4rem; margin-right: .25rem; }
 
-.bl-title {
-    font-family: "Space Grotesk", "Inter", sans-serif;
-    font-size: 2rem; font-weight: 700;
-    color: #223886 !important;
-    margin: 0 0 .4rem;
-    display: flex; align-items: center; gap: .5rem;
-}
-.bl-title .ms { font-size: 2rem; color: #223886; }
-.bl-sub {
-    font-size: 1rem; color: #6b7280 !important;
-    margin: 0 0 2.5rem; max-width: 680px; line-height: 1.55;
-}
-.bl-section {
-    font-family: "Space Grotesk", "Inter", sans-serif;
-    font-size: .72rem; font-weight: 700; letter-spacing: .1em;
-    text-transform: uppercase; color: #9ca3af !important;
-    margin: 2rem 0 .75rem;
-}
-.bl-metric-label {
-    font-size: .78rem; font-weight: 600; color: #374151 !important;
-    margin-bottom: .3rem;
-}
-.bl-note {
-    font-size: .78rem; color: #9ca3af !important;
-    margin: .5rem 0 1.5rem; line-height: 1.5;
-}
-.bl-winner-badge {
-    display: inline-block;
-    background: #eef8d0; color: #3d6a00 !important;
-    font-size: .7rem; font-weight: 700;
-    padding: .15rem .45rem; border-radius: 4px;
-    letter-spacing: .04em;
-}
-.bl-error-row {
-    font-size: .78rem; color: #dc2626 !important;
-    padding: .25rem 0;
-}
+h1,h2,h3,h4,h5,h6 { font-family:"Space Grotesk","Inter",sans-serif !important; letter-spacing:-.01em; }
 
+.bl-title { font-family:"Space Grotesk","Inter",sans-serif; font-size:1.6rem; font-weight:700;
+    color:#223886 !important; margin-bottom:.15rem; display:flex; align-items:center; gap:.35rem; }
+.bl-sub { font-size:.9rem; color:#6b7280 !important; margin-bottom:1.5rem; max-width:700px; line-height:1.55; }
+.bl-section { font-size:.68rem; font-weight:700; color:#9ca3af !important; text-transform:uppercase;
+    letter-spacing:.1em; margin:1.75rem 0 .5rem; padding-bottom:.35rem; border-bottom:1px solid #f3f4f6; }
+.bl-metric-label { font-size:.78rem; font-weight:600; color:#374151 !important; margin-bottom:.3rem; }
+.bl-note { font-size:.78rem; color:#9ca3af !important; margin:.5rem 0 1.5rem; line-height:1.5; }
+.bl-error-row { font-size:.78rem; color:#dc2626 !important; padding:.25rem 0; }
+
+div[data-testid="stButton"] { display:flex !important; justify-content:flex-start !important; }
 div[data-testid="stButton"] > button {
-    background-color: #223886 !important; color: #ffffff !important;
-    border: 1px solid #223886 !important;
-    border-bottom: 3px solid #9ec83b !important;
-    border-radius: 6px !important;
-    font-size: .85rem !important; font-weight: 600 !important;
-    padding: .5rem 1.2rem !important;
-    transition: all .12s !important;
-    font-family: "Inter", sans-serif !important;
-}
+    background-color:#ffffff !important; color:#111827 !important;
+    border:1px solid #e5e7eb !important; border-radius:6px !important;
+    font-size:.8rem !important; font-weight:500 !important;
+    padding:5px 16px !important; width:auto !important; transition:all .12s !important; }
 div[data-testid="stButton"] > button:hover {
-    background-color: #1a2b66 !important; border-color: #1a2b66 !important;
-}
-div[data-testid="stButton"] > button[kind="secondary"],
-div[data-testid="stButton"] > button[data-testid="baseButton-secondary"] {
-    background-color: #ffffff !important; color: #6b7280 !important;
-    border: 1px solid #e5e7eb !important; border-bottom: 1px solid #e5e7eb !important;
-    font-weight: 500 !important;
-}
+    background-color:#eef1fb !important; border-color:#223886 !important; }
+div[data-testid="stButton"] > button[data-testid="baseButton-primary"] {
+    background-color:#223886 !important; color:#ffffff !important;
+    border-color:#223886 !important; font-weight:600 !important;
+    border-bottom:3px solid #9ec83b !important; }
+div[data-testid="stButton"] > button[data-testid="baseButton-primary"]:hover {
+    background-color:#1a2b66 !important; border-color:#1a2b66 !important; }
 </style>
 """, unsafe_allow_html=True)
 
