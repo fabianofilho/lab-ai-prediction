@@ -35,6 +35,10 @@ from .pima import load as _load_pima, DICT_META as _PIMA_DICT
 from .heart import load as _load_heart, DICT_META as _HEART_DICT
 from .heart_failure import load as _load_hf, DICT_META as _HF_DICT
 from .breast_cancer import load as _load_bc, DICT_META as _BC_DICT
+from .ilpd import load as _load_ilpd, DICT_META as _ILPD_DICT
+from .mammographic import load as _load_mammo, DICT_META as _MAMMO_DICT
+from .parkinsons import load as _load_park, DICT_META as _PARK_DICT
+from .ckd import load as _load_ckd, DICT_META as _CKD_DICT
 
 
 BENCHMARK_GROUPS: dict[str, list[Benchmark]] = {
@@ -90,6 +94,58 @@ BENCHMARK_GROUPS: dict[str, list[Benchmark]] = {
             target_col="target",
             loader=_load_bc,
             dict_meta=_BC_DICT,
+        ),
+        Benchmark(
+            key="bench_ilpd",
+            name="Indian Liver Patient (ILPD)",
+            source="UCI",
+            icon="gastroenterology",
+            est_min=1,
+            status="ok",
+            note="583 pacientes, 10 features bioquímicas (bilirrubina, enzimas hepáticas, albumina), doença hepática sim/não.",
+            url="https://archive.ics.uci.edu/dataset/225/ilpd+indian+liver+patient+dataset",
+            target_col="target",
+            loader=_load_ilpd,
+            dict_meta=_ILPD_DICT,
+        ),
+        Benchmark(
+            key="bench_mammographic",
+            name="Mammographic Mass",
+            source="UCI",
+            icon="mammography",
+            est_min=1,
+            status="ok",
+            note="961 casos, features de forma/margem/densidade + idade, massa maligna vs benigna. Coluna BI-RADS removida (avaliação do laudo, vazamento).",
+            url="https://archive.ics.uci.edu/dataset/161/mammographic+mass",
+            target_col="target",
+            loader=_load_mammo,
+            dict_meta=_MAMMO_DICT,
+        ),
+        Benchmark(
+            key="bench_parkinsons",
+            name="Parkinsons (voz)",
+            source="UCI",
+            icon="neurology",
+            est_min=1,
+            status="ok",
+            note="195 gravações de voz, 22 features acústicas (jitter, shimmer, HNR), saudável vs Parkinson. Coluna 'name' removida (identificador).",
+            url="https://archive.ics.uci.edu/dataset/174/parkinsons",
+            target_col="target",
+            loader=_load_park,
+            dict_meta=_PARK_DICT,
+        ),
+        Benchmark(
+            key="bench_ckd",
+            name="Chronic Kidney Disease",
+            source="UCI",
+            icon="nephrology",
+            est_min=1,
+            status="ok",
+            note="399 pacientes, 24 features clínicas/laboratoriais, doença renal crônica sim/não. CSV vendorizado do ARFF oficial (1 linha corrompida descartada).",
+            url="https://archive.ics.uci.edu/dataset/336/chronic+kidney+disease",
+            target_col="target",
+            loader=_load_ckd,
+            dict_meta=_CKD_DICT,
         ),
     ],
     "Cuidado intensivo (PhysioNet)": [
