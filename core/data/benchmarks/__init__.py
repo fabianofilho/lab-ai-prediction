@@ -29,6 +29,7 @@ class Benchmark:
     target_col: str = "target"
     loader: Optional[Callable[[], pd.DataFrame]] = None
     dict_meta: Optional[dict] = None
+    country: str = "intl"  # "intl" = internacional, "br" = DATASUS (Brasil)
 
 
 from .pima import load as _load_pima, DICT_META as _PIMA_DICT
@@ -39,6 +40,28 @@ from .ilpd import load as _load_ilpd, DICT_META as _ILPD_DICT
 from .mammographic import load as _load_mammo, DICT_META as _MAMMO_DICT
 from .parkinsons import load as _load_park, DICT_META as _PARK_DICT
 from .ckd import load as _load_ckd, DICT_META as _CKD_DICT
+from .br_datasus import loader_for as _br_loader, MANIFEST as _BR_MANIFEST
+
+
+def _br(key: str, name: str, system: str, icon: str, note: str) -> "Benchmark":
+    """Monta um Benchmark brasileiro (DATASUS) a partir do manifest dos samples."""
+    m = _BR_MANIFEST.get(key, {})
+    n = m.get("n", 0)
+    uf = m.get("uf", "?")
+    year = m.get("year", "?")
+    return Benchmark(
+        key=f"bench_br_{key}",
+        name=name,
+        source=f"DATASUS / {system}",
+        icon=icon,
+        est_min=1,
+        status="ok",
+        note=f"{note} Sample materializado: {n} registros, {system} {uf}/{year}.",
+        url="https://datasus.saude.gov.br/",
+        target_col="target",
+        loader=_br_loader(key),
+        country="br",
+    )
 
 
 BENCHMARK_GROUPS: dict[str, list[Benchmark]] = {
@@ -147,6 +170,22 @@ BENCHMARK_GROUPS: dict[str, list[Benchmark]] = {
             loader=_load_ckd,
             dict_meta=_CKD_DICT,
         ),
+    ],
+    "Brasil (DATASUS)": [
+        _br("cesarea", "Cesárea", "SINASC", "pregnant_woman",
+            "Predição de parto cesáreo a partir do SINASC (nascimentos)."),
+        _br("baixo_peso_nascer", "Baixo peso ao nascer", "SINASC", "monitor_weight",
+            "Recém-nascido com peso < 2500 g a partir do SINASC."),
+        _br("prematuridade", "Prematuridade", "SINASC", "neonatology",
+            "Nascimento prematuro (< 37 semanas) a partir do SINASC."),
+        _br("uso_uti", "Uso de UTI", "SIH", "bed",
+            "Uso de UTI na internação a partir do SIH (internações)."),
+        _br("custo_elevado", "Custo elevado de internação", "SIH", "payments",
+            "Internação no topo de custo (percentil alto) a partir do SIH."),
+        _br("obito_tb", "Óbito por tuberculose", "SINAN", "coronavirus",
+            "Óbito em caso de tuberculose a partir do SINAN."),
+        _br("abandono_tb", "Abandono de tratamento de TB", "SINAN", "running_with_errors",
+            "Abandono do tratamento de tuberculose a partir do SINAN."),
     ],
     "Cuidado intensivo (PhysioNet)": [
         Benchmark(

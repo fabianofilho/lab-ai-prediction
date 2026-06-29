@@ -1,4 +1,5 @@
 """BenchLab — comparativo global de algoritmos x datasets de saude."""
+import random
 from pathlib import Path
 
 import pandas as pd
@@ -89,6 +90,8 @@ st.markdown(
 
 # ── Datasets e algoritmos disponiveis ─────────────────────────────────────────
 OK_BENCHES = [b for b in BENCHMARKS.values() if b.status == "ok" and b.loader is not None]
+INTL_BENCHES = [b for b in OK_BENCHES if b.country != "br"]
+BR_BENCHES = [b for b in OK_BENCHES if b.country == "br"]
 ALGO_DISPLAY = {v: k for k, v in BENCH_ALGORITHMS.items()}  # key -> nome
 
 # ── Configuracao ──────────────────────────────────────────────────────────────
@@ -99,10 +102,59 @@ cfg_col1, cfg_col2, cfg_col3 = st.columns([3, 3, 2])
 with cfg_col1:
     st.markdown('<p class="bl-metric-label">Datasets</p>', unsafe_allow_html=True)
     selected_datasets = []
-    for bench in OK_BENCHES:
+    for bench in INTL_BENCHES:
         checked = st.checkbox(bench.name, value=True, key=f"bl_ds_{bench.key}")
         if checked:
             selected_datasets.append(bench)
+
+    # ── Datasets brasileiros (DATASUS), com sorteio entre os disponiveis ───────
+    if BR_BENCHES:
+        st.markdown(
+            '<p class="bl-metric-label" style="margin-top:.85rem">Brasil (DATASUS)</p>',
+            unsafe_allow_html=True,
+        )
+        include_br = st.checkbox(
+            "Incluir dataset brasileiro", value=False, key="bl_br_on"
+        )
+        if include_br:
+            br_by_key = {b.key: b for b in BR_BENCHES}
+            mode = st.radio(
+                "Selecao do dataset brasileiro",
+                ["Aleatorio", "Escolher"],
+                horizontal=True,
+                key="bl_br_mode",
+                label_visibility="collapsed",
+            )
+            if mode == "Aleatorio":
+                k = st.number_input(
+                    "Quantos sortear",
+                    min_value=1, max_value=len(BR_BENCHES), value=1, step=1,
+                    key="bl_br_k",
+                )
+                draw = st.button("Sortear", key="bl_br_draw", type="secondary")
+                cur = st.session_state.get("bl_br_pick", [])
+                # (re)sorteia ao clicar, ao habilitar pela 1a vez, ou se a
+                # quantidade muda; senao mantem o sorteio estavel entre reruns.
+                stale = (not cur) or len(cur) != int(k) or any(x not in br_by_key for x in cur)
+                if draw or stale:
+                    cur = [b.key for b in random.sample(BR_BENCHES, int(k))]
+                    st.session_state["bl_br_pick"] = cur
+                picked = [br_by_key[x] for x in cur if x in br_by_key]
+                if picked:
+                    names = ", ".join(b.name for b in picked)
+                    st.markdown(
+                        f'<p class="bl-note">Sorteado: <b>{names}</b></p>',
+                        unsafe_allow_html=True,
+                    )
+                selected_datasets += picked
+            else:
+                chosen = st.multiselect(
+                    "Datasets brasileiros",
+                    [b.name for b in BR_BENCHES],
+                    key="bl_br_choose",
+                    label_visibility="collapsed",
+                )
+                selected_datasets += [b for b in BR_BENCHES if b.name in chosen]
 
 with cfg_col2:
     st.markdown('<p class="bl-metric-label">Algoritmos</p>', unsafe_allow_html=True)

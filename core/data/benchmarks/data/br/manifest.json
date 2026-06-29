@@ -1,0 +1,65 @@
+{
+  "cesarea": {
+    "system": "SINASC",
+    "uf": "GO",
+    "year": 2023,
+    "n": 6000,
+    "n_features": 14,
+    "pos": 4118,
+    "neg": 1882
+  },
+  "baixo_peso_nascer": {
+    "system": "SINASC",
+    "uf": "GO",
+    "year": 2023,
+    "n": 6000,
+    "n_features": 14,
+    "pos": 590,
+    "neg": 5410
+  },
+  "prematuridade": {
+    "system": "SINASC",
+    "uf": "GO",
+    "year": 2023,
+    "n": 6000,
+    "n_features": 14,
+    "pos": 699,
+    "neg": 5301
+  },
+  "uso_uti": {
+    "system": "SIH",
+    "uf": "GO",
+    "year": 2023,
+    "n": 6000,
+    "n_features": 9,
+    "pos": 442,
+    "neg": 5558
+  },
+  "custo_elevado": {
+    "system": "SIH",
+    "uf": "GO",
+    "year": 2023,
+    "n": 6000,
+    "n_features": 10,
+    "pos": 600,
+    "neg": 5400
+  },
+  "obito_tb": {
+    "system": "SINAN_TB",
+    "uf": "GO",
+    "year": 2023,
+    "n": 1439,
+    "n_features": 13,
+    "pos": 222,
+    "neg": 1217
+  },
+  "abandono_tb": {
+    "system": "SINAN_TB",
+    "uf": "GO",
+    "year": 2023,
+    "n": 1439,
+    "n_features": 13,
+    "pos": 74,
+    "neg": 1365
+  }
+}
