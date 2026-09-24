@@ -29,7 +29,7 @@ class PermanenciaProlongada(OutcomeConfig):
             estimated_download_min=10,
             suggested_features=[
                 "IDADE", "SEXO", "diag_chapter", "diag_block",
-                "used_icu", "CAR_INT", "RACA_COR",
+                "CAR_INT", "RACA_COR",
                 "PROC_REA", "age_group",
             ],
             target_col="permanencia_prolongada",

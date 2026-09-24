@@ -14,8 +14,9 @@ class ChikungunyaHospitalizado(OutcomeConfig):
             description=(
                 "Prediz a probabilidade de um paciente notificado com chikungunya necessitar "
                 "de hospitalização. Features incluem sintomas na notificação inicial, "
-                "comorbidades (diabetes, hipertensão, doença renal, hepatopatia), "
-                "sinais de alarme e características demográficas. Utiliza SINAN-Chikungunya."
+                "comorbidades (diabetes, hipertensão, doença renal, hepatopatia) e "
+                "características demográficas. Sinais de alarme (ALRM_*) ficam fora das "
+                "preditoras, porque são critério de internação. Utiliza SINAN-Chikungunya."
             ),
             data_sources=["SINAN_CHIK"],
             observation_window_days=0,
@@ -28,7 +29,6 @@ class ChikungunyaHospitalizado(OutcomeConfig):
                 "FEBRE", "MIALGIA", "ARTRITE", "ARTRALGIA", "VOMITO",
                 "PETEQUIA_N", "LEUCOPENIA",
                 "DIABETES", "HIPERTENSA", "RENAL", "HEPATOPAT",
-                "ALRM_HIPOT", "ALRM_PLAQ", "ALRM_VOM",
                 "CS_GESTANT", "age_group",
             ],
             target_col="hospitalizado",
@@ -38,6 +38,8 @@ class ChikungunyaHospitalizado(OutcomeConfig):
         df = chik_prep.preprocess(data["SINAN_CHIK"])
         df = chik_prep.filter_confirmed(df)
         df = df.drop(columns=["obito", "EVOLUCAO", "DT_OBITO", "CLINC_CHIK"], errors="ignore")
+        # Sinais de alarme e de gravidade são critério de internação (vazamento)
+        df = df.drop(columns=[c for c in df.columns if c.startswith(("ALRM_", "GRAV_"))])
         return df
 
     def build_features(self, cohort: pd.DataFrame) -> pd.DataFrame:

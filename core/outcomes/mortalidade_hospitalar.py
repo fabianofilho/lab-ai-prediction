@@ -16,10 +16,11 @@ class MortalidadeHospitalar(OutcomeConfig):
             key="mortalidade_hospitalar",
             name="Mortalidade Hospitalar",
             description=(
-                "Prediz o risco de óbito durante a internação ou em até 30 dias após a alta. "
-                "Combina o campo MOT_SAIDA do SIH (óbito na alta) com record linkage ao SIM "
-                "(para capturar mortes pós-alta). "
-                "Requer dados do SIH e do SIM para o mesmo estado e ano."
+                "Prediz o risco de óbito intra-hospitalar (campo MORTE da AIH no SIH-RD) a "
+                "partir do que se sabe na admissão. O linkage com o SIM para óbitos após a "
+                "alta não pareia no dado público, então o alvo é só o óbito durante a "
+                "internação. Permanência, UTI, diárias e valor total ficam fora das "
+                "preditoras: só existem na alta."
             ),
             data_sources=["SIH", "SIM"],
             observation_window_days=0,
@@ -29,8 +30,7 @@ class MortalidadeHospitalar(OutcomeConfig):
             estimated_download_min=15,
             suggested_features=[
                 "IDADE", "SEXO", "diag_chapter", "diag_block",
-                "length_of_stay_days", "used_icu", "DIARIAS",
-                "n_diag_sec", "VAL_TOT", "CAR_INT_code",
+                "n_diag_sec", "CAR_INT_code",
                 "age_group", "RACA_COR", "proc_rea_code",
             ],
             target_col="obito",
