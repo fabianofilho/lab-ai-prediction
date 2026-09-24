@@ -60,7 +60,7 @@ lateral explicando como o dado é puxado e como o desfecho é derivado.
 | Apgar Baixo no 5º Minuto | SINASC | ok |
 | Parto Cesariana | SINASC | ok |
 | Anomalia Congênita | SINASC | ok (raro ~0,9%) |
-| Mortalidade Neonatal | SINASC + SIM | ok (linkage DTNASC+SEXO+PESO) |
+| Mortalidade Neonatal | SINASC + SIM | em desenvolvimento (linkage DTNASC+SEXO+PESO sem validação) |
 
 ### Internação Hospitalar (SIH, SIM)
 | Desfecho | Fonte | Status |

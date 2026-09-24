@@ -38,7 +38,7 @@ METHODOLOGY: dict[str, dict] = {
         "pull": "Baixa SINASC (nascimentos) e SIM (óbitos) do estado/ano. Filtra no SIM os óbitos neonatais (idade em horas/dias ≤ 28) e marca os nascimentos cuja chave aparece entre esses óbitos.",
         "target": "Óbito até 28 dias de vida.",
         "linkage": "Linkage determinístico SINASC ↔ SIM pela chave DTNASC + SEXO + PESO. Pareamento por quase-identificadores, já que o dado público não traz identificador direto do recém-nascido.",
-        "caveat": "Prevalência baixa; considere balanceamento.",
+        "caveat": "Em desenvolvimento: o linkage por DTNASC + SEXO + PESO deixa chaves nulas casarem entre si e não impõe pareamento 1:1, o que infla os óbitos. Prevalência baixa; considere balanceamento.",
     },
     "permanencia_prolongada": {
         "pull": "Base SIH-RD (internações) do estado/ano. Tempo de permanência calculado de DT_INTER a DT_SAIDA. Uso de UTI sai das preditoras: só existe na alta.",

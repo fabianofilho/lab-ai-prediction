@@ -32,9 +32,9 @@ OUTCOME_GROUPS = {
          "source": "SINASC", "est_min": 5, "status": "ok", "linkage": None,
          "note": "Base única SINASC. Desfecho raro (~0,9%), considere balanceamento."},
         {"key": "mortalidade_neonatal", "icon": "child_care", "name": "Mortalidade Neonatal",
-         "source": "SINASC + SIM", "est_min": 12, "status": "ok",
-         "linkage": "Linkage determinístico SINASC ↔ SIM por DTNASC/SEXO/PESO. Pareamento aproximado.",
-         "note": "Linkage entre nascimentos (SINASC) e óbitos neonatais (SIM). Prevalência baixa, considere balanceamento."},
+         "source": "SINASC + SIM", "est_min": 12, "status": "dev",
+         "linkage": "Linkage SINASC e SIM por DTNASC/SEXO/PESO ainda sem validação: chaves nulas casam entre si e não há pareamento 1:1.",
+         "note": "Em desenvolvimento: o linkage SINASC e SIM infla os óbitos e precisa ser corrigido antes de liberar o desfecho."},
     ],
     "Internação Hospitalar": [
         {"key": "readmissao_30d", "icon": "sync", "name": "Readmissão Hospitalar 30 dias",
@@ -55,8 +55,8 @@ OUTCOME_GROUPS = {
          "note": "Base única SIH. Pipeline completo disponível."},
         {"key": "mortalidade_hospitalar", "icon": "monitor_heart", "name": "Mortalidade Hospitalar",
          "source": "SIH + SIM", "est_min": 15, "status": "ok",
-         "linkage": "Alvo principal = óbito intra-hospitalar (MORTE no SIH). Linkage com SIM enriquece como proxy.",
-         "note": "Mortalidade durante a internação (SIH). Pipeline completo disponível."},
+         "linkage": "Alvo = óbito intra-hospitalar (MORTE da AIH no SIH). O linkage com o SIM não pareia no dado público e não entra no alvo.",
+         "note": "Óbito intra-hospitalar (campo MORTE da AIH). Pipeline completo disponível."},
     ],
     "SINAN": [
         {"key": "abandono_tb", "icon": "pulmonology", "name": "Abandono de Tratamento TB",
