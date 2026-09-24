@@ -44,22 +44,30 @@ from .br_datasus import loader_for as _br_loader, MANIFEST as _BR_MANIFEST
 
 
 def _br(key: str, name: str, system: str, icon: str, note: str) -> "Benchmark":
-    """Monta um Benchmark brasileiro (DATASUS) a partir do manifest dos samples."""
+    """Monta um Benchmark brasileiro (DATASUS) a partir do manifest dos samples.
+
+    Sample marcado com `rotulo_invalido` no manifest fica fora do BenchLab
+    (status "dev", sem loader) até ser regenerado; o aviso vai para a nota.
+    """
     m = _BR_MANIFEST.get(key, {})
     n = m.get("n", 0)
     uf = m.get("uf", "?")
     year = m.get("year", "?")
+    invalido = bool(m.get("rotulo_invalido"))
+    note = f"{note} Sample materializado: {n} registros, {system} {uf}/{year}."
+    if invalido:
+        note = f"{note} INDISPONÍVEL: {m.get('aviso', 'rótulo inválido, regenerar o sample.')}"
     return Benchmark(
         key=f"bench_br_{key}",
         name=name,
         source=f"DATASUS / {system}",
         icon=icon,
         est_min=1,
-        status="ok",
-        note=f"{note} Sample materializado: {n} registros, {system} {uf}/{year}.",
+        status="dev" if invalido else "ok",
+        note=note,
         url="https://datasus.saude.gov.br/",
         target_col="target",
-        loader=_br_loader(key),
+        loader=None if invalido else _br_loader(key),
         country="br",
     )
 
