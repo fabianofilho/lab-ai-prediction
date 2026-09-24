@@ -83,6 +83,7 @@ METHODOLOGY: dict[str, dict] = {
     "abandono_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos encerrados.",
         "target": "Saída por abandono de tratamento (TPALTA_N = 3).",
+        "caveat": "O código de abandono em TPALTA_N ainda não foi conferido com o dicionário oficial do SINAN-Hanseníase; o resultado deste desfecho depende dessa conferência.",
     },
     "incapacidade_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). AVALIA_N/grau_incapacidade (fonte do alvo) e colunas pós-tratamento (TPALTA_N, doses) saem das preditoras.",

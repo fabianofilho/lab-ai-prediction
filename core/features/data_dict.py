@@ -409,10 +409,10 @@ _SINAN_HANS: dict[str, dict] = {
         "values": {"1": "Indeterminada", "2": "Tuberculoide", "3": "Dimorfa", "4": "Virchowiana"},
     },
     "mb": {
-        "label": "Classificação Operacional",
-        "desc": "Categoria para fins de tratamento: Paucibacilar (1), Multibacilar (2).",
-        "type": "Categórica",
-        "values": {"1": "Paucibacilar", "2": "Multibacilar"},
+        "label": "Multibacilar",
+        "desc": "Flag derivada da classificação operacional (CLASSOPERA): Multibacilar (CLASSOPERA = 2) vira 1, Paucibacilar (CLASSOPERA = 1) vira 0.",
+        "type": "Derivada",
+        "values": {"0": "Paucibacilar", "1": "Multibacilar"},
     },
     "grau_incapacidade": {
         "label": "Grau de Incapacidade",

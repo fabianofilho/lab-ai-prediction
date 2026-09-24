@@ -12,8 +12,11 @@ import pytest
 
 from core.data import sinan as tb_prep
 from core.data import sinan_deng as deng_prep
+from core.data import sinan_hans as hans_prep
+from core.outcomes.abandono_hanseniase import AbandonoHanseniase
 from core.outcomes.abandono_tb import AbandonoTB
 from core.outcomes.dengue_grave import DengueGrave
+from core.outcomes.incapacidade_hanseniase import IncapacidadeHanseniase
 from core.outcomes.obito_tb import ObitoTB
 
 # ── Tuberculose: SITUA_ENCE ──────────────────────────────────────────────────
@@ -148,3 +151,37 @@ def test_dengue_inconclusivo_nunca_e_positivo():
     assert deng_prep.CLASSI_INCONCLUSIVO not in deng_prep.CLASSI_CONFIRMADO
     assert deng_prep.CLASSI_CONFIRMADO == {"10", "11", "12"}
     assert {deng_prep.CLASSI_ALARME, deng_prep.CLASSI_GRAVE} == {"11", "12"}
+
+
+# ── Hanseníase: flag multibacilar ────────────────────────────────────────────
+
+def _hans_raw():
+    # FORMACLINI e CLASSOPERA discordam de propósito: tuberculoide (2) é PB e
+    # dimorfa/virchowiana (3, 4) são MB.
+    return pd.DataFrame({
+        "FORMACLINI": ["1", "2", "3", "4", "2"],
+        "CLASSOPERA": ["1", "1", "2", "2", "2.0"],
+        "TPALTA_N":   ["1", "1", "1", "1", "1"],
+        "AVALIA_N":   ["0", "0", "2", "1", "0"],
+        "NU_IDADE_N": [4040] * 5,
+        "CS_SEXO":    ["M"] * 5,
+    })
+
+
+def test_hanseniase_mb_vem_de_classopera():
+    df = hans_prep.preprocess(_hans_raw())
+    assert df["mb"].tolist() == [0, 0, 1, 1, 1]
+
+
+def test_hanseniase_mb_ausente_sem_classopera():
+    raw = _hans_raw().drop(columns=["CLASSOPERA"])
+    df = hans_prep.preprocess(raw)
+    assert "mb" not in df.columns, "mb não pode voltar a ser derivado de FORMACLINI"
+
+
+@pytest.mark.parametrize("outcome_cls", [AbandonoHanseniase, IncapacidadeHanseniase])
+def test_hanseniase_desfechos_usam_mb_do_classopera(outcome_cls):
+    oc = outcome_cls()
+    assert "mb" in oc.suggested_features
+    cohort = oc.build_features(oc.build_cohort({"SINAN_HANS": _hans_raw()}))
+    assert cohort["mb"].tolist() == [0, 0, 1, 1, 1]
