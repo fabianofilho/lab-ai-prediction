@@ -578,7 +578,8 @@ def fetch(
 
 def load_from_csv(csv_bytes: bytes, system: str, state: str, year: int) -> pd.DataFrame:
     """Load a manually-uploaded CSV, cache to parquet, return DataFrame."""
-    df = pd.read_csv(io.BytesIO(csv_bytes), encoding="latin-1", low_memory=False, sep=None, engine="python")
+    # sep=None exige o engine python, que não aceita low_memory (ValueError).
+    df = pd.read_csv(io.BytesIO(csv_bytes), encoding="latin-1", sep=None, engine="python")
     return _save(df, system, state, year)
 
 
