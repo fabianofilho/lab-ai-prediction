@@ -71,12 +71,14 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "A detecção exige ambas as internações na amostra: use amostra grande (≥ 30.000). Amostras pequenas quebram os pares e subestimam a readmissão.",
     },
     "abandono_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados (situação de encerramento conhecida).",
-        "target": "Encerramento por abandono de tratamento (SITUA_ENCE = abandono).",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados com situação de encerramento conhecida. Transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log.",
+        "target": "Encerramento por abandono (SITUA_ENCE = 2) ou abandono primário (SITUA_ENCE = 10). Cura (1), óbito por TB (3), óbito por outras causas (4) e falência (9) são negativos.",
+        "caveat": "Mapa de SITUA_ENCE conferido com o dicionário do SINAN-TB usado no PySUS e no sinan-continual-learning, mas ainda não contra um arquivo TUBEBR bruto.",
     },
     "obito_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
-        "target": "Óbito ao encerramento do caso (SITUA_ENCE = 2, por TB ou outra causa). Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; transferência, mudança de diagnóstico, TB-DR e mudança de esquema (SITUA_ENCE 5 a 8) são censura e saem da coorte. SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
+        "target": "Óbito ao encerramento do caso, por TB (SITUA_ENCE = 3) ou por outras causas (SITUA_ENCE = 4). Cura, abandono, falência e abandono primário são negativos. Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
+        "caveat": "Óbito por outras causas conta como positivo; tratá-lo como risco competitivo é decisão metodológica ainda em aberto.",
     },
     "abandono_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos encerrados.",
