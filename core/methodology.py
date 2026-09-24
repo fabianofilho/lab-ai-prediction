@@ -91,7 +91,8 @@ METHODOLOGY: dict[str, dict] = {
     },
     "dengue_grave": {
         "pull": "Base SINAN-Dengue (nacional, filtrada por UF; arquivo grande, 1º download mais lento). CLASSI_FIN sai das preditoras; sinais de alarme ALRM_* entram como features.",
-        "target": "Classificação final com sinais de alarme (CLASSI_FIN = 8) ou dengue grave (CLASSI_FIN = 11).",
+        "target": "Classificação final com sinais de alarme (CLASSI_FIN = 11) ou dengue grave (CLASSI_FIN = 12). Coorte = dengue confirmada (CLASSI_FIN 10, 11 ou 12); descartado (5), inconclusivo (8) e chikungunya (13) saem.",
+        "caveat": "Códigos do layout 2014 em diante. Notificações no layout anterior (CLASSI_FIN 1 a 4) ficam fora da coorte.",
     },
     "chikungunya_hospitalizado": {
         "pull": "Base SINAN-Chikungunya (nacional, filtrada por UF). Coorte = casos confirmados.",

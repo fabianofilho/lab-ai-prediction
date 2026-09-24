@@ -11,7 +11,9 @@ import pandas as pd
 import pytest
 
 from core.data import sinan as tb_prep
+from core.data import sinan_deng as deng_prep
 from core.outcomes.abandono_tb import AbandonoTB
+from core.outcomes.dengue_grave import DengueGrave
 from core.outcomes.obito_tb import ObitoTB
 
 # ── Tuberculose: SITUA_ENCE ──────────────────────────────────────────────────
@@ -100,3 +102,49 @@ def test_tb_get_target_nao_preenche_censura_com_zero(outcome_cls):
     cohort = pd.DataFrame({oc.target_col: [1.0, 0.0, np.nan]})
     with pytest.raises(ValueError, match="censura"):
         oc.get_target(cohort)
+
+
+# ── Dengue: CLASSI_FIN (layout 2014 em diante) ───────────────────────────────
+
+# Código -> (na coorte confirmada?, dengue_grave esperado)
+DENGUE_ESPERADO = {
+    "5": (False, None),   # descartado
+    "8": (False, None),   # inconclusivo
+    "10": (True, 0),      # dengue
+    "11": (True, 1),      # dengue com sinais de alarme
+    "12": (True, 1),      # dengue grave
+    "13": (False, None),  # chikungunya
+}
+
+
+def _deng_raw(codigos):
+    n = len(codigos)
+    return pd.DataFrame({
+        "CLASSI_FIN": codigos,
+        "NU_IDADE_N": [4030] * n,
+        "CS_SEXO": ["F"] * n,
+        "FEBRE": ["1"] * n,
+    })
+
+
+def test_dengue_mapa_classi_fin():
+    df = deng_prep.preprocess(_deng_raw(list(DENGUE_ESPERADO)))
+    for i, (cod, (confirmado, grave)) in enumerate(DENGUE_ESPERADO.items()):
+        assert df["dengue_confirmado"].iloc[i] == int(confirmado), f"CLASSI_FIN {cod}"
+        if confirmado:
+            assert df["dengue_grave"].iloc[i] == grave, f"CLASSI_FIN {cod}"
+
+
+def test_dengue_coorte_so_confirmados_e_grave_fica():
+    oc = DengueGrave()
+    cohort = oc.build_cohort({"SINAN_DENG": _deng_raw(["5", "8", "10", "11", "12", "13", "12.0"])})
+    y = oc.get_target(oc.build_features(cohort))
+    # 10, 11, 12 e 12.0 ficam; 5, 8 e 13 saem
+    assert len(y) == 4
+    assert y.tolist() == [0, 1, 1, 1]
+
+
+def test_dengue_inconclusivo_nunca_e_positivo():
+    assert deng_prep.CLASSI_INCONCLUSIVO not in deng_prep.CLASSI_CONFIRMADO
+    assert deng_prep.CLASSI_CONFIRMADO == {"10", "11", "12"}
+    assert {deng_prep.CLASSI_ALARME, deng_prep.CLASSI_GRAVE} == {"11", "12"}
