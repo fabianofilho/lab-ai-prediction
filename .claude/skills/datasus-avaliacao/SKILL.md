@@ -40,7 +40,7 @@ Também em `evaluation.py`: `threshold_metrics(y, p, threshold=0.5)` (sensibilid
 
 ## Que métricas reportar
 
-A métrica principal, o ponto de corte e o que reportar de calibração e de utilidade clínica saem da `ml-checkpoints`: a métrica principal é escolhida no CP8, antes de rodar; a calibração é medida por O:E, calibration-in-the-large, slope e Brier (CP9); e a decision curve compara o modelo com a melhor das estratégias triviais, tratar todos ou ninguém, exigindo margem absoluta mínima e não superioridade qualquer (CP8). O porquê está em `docs/aprendizados-pipeline-agentes.md`, no ai-lab-hub (itens 7 e 13).
+A métrica principal, o ponto de corte e o que reportar de calibração e de utilidade clínica saem da `ml-checkpoints`: a métrica principal e o ponto de corte são escolhidos no CP8, antes de rodar, e a decision curve compara o modelo com tratar todos e com não tratar ninguém; a calibração é reportada com slope, intercepto e Brier (CP9). A tabela do relatório é a da `ml-eval-report`. O porquê está em `docs/aprendizados-pipeline-agentes.md`, no ai-lab-hub: o item 7 trata do O:E e do calibration-in-the-large que o balanceamento degrada, e o item 13, da margem sobre a melhor estratégia trivial na decision curve.
 
 O que o app calcula hoje e o que falta:
 
