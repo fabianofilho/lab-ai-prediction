@@ -85,7 +85,7 @@ O que `_build_preprocessor(X, treatment, algorithm)` monta para cada tratamento:
 | categórica | `target` | `TargetEncoder(smooth="auto")`, sem imputador; cai para ordinal se o sklearn não tiver `TargetEncoder` |
 | qualquer | `drop` | a coluna fica fora do modelo |
 
-Padrões: com `treatment=None`, os tipos saem do dtype e o tratamento é `none` para numéricas e `ohe` para categóricas. Na tela, os dois padrões são `none`. Os desfechos DATASUS já entregam várias categóricas como código numérico (`build_features`), então elas caem no grupo numérico, a menos que a tela troque o tipo.
+Padrões: com `treatment=None`, os tipos saem do dtype e o tratamento é `none` para numéricas e `ohe` para categóricas; como o `build_features` dos desfechos DATASUS já converte várias categóricas em código numérico, elas caem no grupo numérico. Na tela, os dois padrões são `none`, e o tipo de cada coluna vem primeiro do `data_dict` (Categórica e Ordinal viram categóricas), depois do dtype, e pode ser trocado coluna a coluna.
 
 ---
 
