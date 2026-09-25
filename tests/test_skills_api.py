@@ -10,7 +10,10 @@ Confere, em cada .md:
 - os imports `from core... import ...` dos blocos python;
 - as chamadas a funções e classes do app: argumentos nomeados que existem
   na assinatura e quantidade de posicionais que cabe nela;
-- assinaturas citadas como `funcao(a, b, c=1)` em texto corrido.
+- assinaturas citadas como `funcao(a, b, c=1)` em texto corrido;
+- nomes privados (`_build_model`) e chamadas (`fetch(...)`) citados entre
+  crases precisam aparecer no código do app, para que uma função renomeada
+  não passe calada pelas checagens acima, que só conferem o que acham.
 """
 from __future__ import annotations
 
@@ -43,6 +46,7 @@ BLOCK_RE = re.compile(r"```python\n(.*?)```", re.DOTALL)
 INLINE_RE = re.compile(r"`([^`\n]+\))`")
 IMPORT_RE = re.compile(r"^from (core[\w.]*) import (\([^)]*\)|[^\n]+)", re.MULTILINE)
 SIGNATURE_RE = re.compile(r"^(\w+)\((.*)\)$")
+NAME_SPAN_RE = re.compile(r"`(_?[A-Za-z]\w*)(\(.*?\))?`")
 
 
 def _module_file(mod: str) -> Path | None:
@@ -139,6 +143,27 @@ def _check_imports(tree: ast.AST, bound: dict, modules: dict) -> list[str]:
     return errors
 
 
+@cache
+def _app_source() -> str:
+    files = [ROOT / "app.py"]
+    for sub in ("core", "pages", "tests", "scripts"):
+        files += sorted((ROOT / sub).rglob("*.py"))
+    this = Path(__file__).resolve()
+    return "\n".join(
+        f.read_text(encoding="utf-8") for f in files if f.exists() and f.resolve() != this
+    )
+
+
+def _check_names(text: str) -> list[str]:
+    """Nome privado ou chamada citada entre crases que não aparece no código."""
+    src = _app_source()
+    errors = []
+    for name, call in set(NAME_SPAN_RE.findall(text)):
+        if (name.startswith("_") or call) and not re.search(rf"\b{re.escape(name)}\b", src):
+            errors.append(f"{name} não aparece no código do app")
+    return errors
+
+
 def _check_block(code: str) -> tuple[list[str], int]:
     try:
         tree = ast.parse(code)
@@ -225,6 +250,7 @@ def test_doc_cita_so_o_que_existe(doc):
     for span in INLINE_RE.findall(text):
         errs, _ = _check_inline(span)
         errors += errs
+    errors += _check_names(text)
 
     assert not errors, f"{doc.relative_to(ROOT)}:\n" + "\n".join(sorted(set(errors)))
 
@@ -250,3 +276,6 @@ def test_verificador_pega_a_api_antiga():
     assert any("sentinel_values" in e for e in errors)
     assert any("'cv'" in e for e in errors)
     assert _check_block("from core.models.pipeline import calibrar\n")[0]
+    assert _check_names('`dbc_to_parquet("arquivo.dbc", "saida.parquet")`')
+    assert _check_names("`_calibrar_modelo`")
+    assert not _check_names("`calibrate_model(model, X, y)` e `_compute_metrics`")
