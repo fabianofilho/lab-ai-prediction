@@ -55,14 +55,14 @@ from core.outcomes import OUTCOMES
 outcome = OUTCOMES["prematuridade"]
 builder = CohortBuilder(outcome)
 
-# Ponto de entrada principal — retorna (X, y)
-X, y = builder.get_Xy(raw_data)   # raw_data = dict[str, DataFrame]
+# raw_data = dict[str, DataFrame], um DataFrame bruto por sistema (ex.: {"SINASC": df})
+cohort = builder.build(raw_data)   # outcome.build_cohort(raw_data) e depois outcome.build_features(cohort)
+X, y = builder.get_Xy(cohort)      # y = outcome.get_target(cohort); X = suggested_features presentes
 
-# Internamente chama:
-# 1. outcome.build_cohort(raw_data)   → cohort (uma linha por evento índice)
-# 2. outcome.build_features(cohort)   → feature matrix
-# 3. outcome.get_target(cohort)       → Series binária
+# Também: builder.split(cohort, test_size=0.2) e builder.class_balance(cohort)
 ```
+
+`get_Xy` usa as colunas de `suggested_features` que existem na coorte; se nenhuma existir, usa todas as numéricas menos o alvo.
 
 ---
 
@@ -97,9 +97,9 @@ Usar `info.get("label", col)` como fallback seguro na UI.
 | `age_group_mae`    | IDADEMAE      | `eng.age_group(pd.to_numeric(IDADEMAE, errors='coerce'))` |
 | `diag_chapter`     | DIAG_PRINC    | `eng.icd10_chapter(DIAG_PRINC)`                     |
 | `diag_block`       | DIAG_PRINC    | `eng.icd10_block(DIAG_PRINC)`                       |
-| `n_diag_sec`       | DIAG_SEC cols | `df[diag_sec_cols].notna().sum(axis=1)`             |
+| `n_diag_sec`       | DIAG_SEC, DIAGSEC1 ou DIAG_SECUN | `(~df[diag_sec_col].isna()).astype(int)`, presença do diagnóstico secundário |
 | `hiv_pos`          | HIV           | `(HIV.astype(str) == "1").astype(int)`              |
-| `dot`              | TRAT_SUPER    | `TRAT_SUPER.isin({"1","2"}).astype(int)`            |
+| `dot`              | TRAT_SUPER    | `(TRAT_SUPER == "1").astype(int)`                   |
 
 ---
 
@@ -118,6 +118,8 @@ Usar `info.get("label", col)` como fallback seguro na UI.
 
 Remover com: `df.drop(columns=[...], errors="ignore")`
 
+A lista que os testes travam é `LEAK_BLACKLIST` em `tests/test_invariants.py`: nenhuma coluna dela pode estar em `suggested_features` do desfecho. Coluna nova que vaza o alvo entra lá.
+
 ---
 
 ## Sentinel values DATASUS (antes do pipeline)
@@ -128,8 +130,10 @@ Valores que indicam "ignorado" nos dados brutos:
 # No pré-processamento (core/data/*.py) — substituir por NaN:
 df.replace({"CAMPO": {9: np.nan, 99: np.nan}}, inplace=True)
 
-# No pipeline ML — SentinelReplacer faz isso automaticamente para 9 e 99
-# mas o pré-processador deve tratar casos específicos (ex: IDADE no SIM)
+# No pipeline ML, o SentinelReplacer só entra se o tratamento trouxer null_sentinels
+# (a tela marca 9 e 99 para todas as colunas; a API não tem lista padrão).
+# A norma é sentinela por variável (CP3 da ml-checkpoints), e o pré-processador
+# trata os casos específicos (ex: IDADE no SIM)
 ```
 
 ---
