@@ -30,7 +30,7 @@ class CustoHospitalarElevado(OutcomeConfig):
             estimated_download_min=10,
             suggested_features=[
                 "IDADE", "SEXO", "diag_chapter", "diag_block",
-                "used_icu", "CAR_INT", "length_of_stay_days",
+                "CAR_INT",
                 "RACA_COR", "age_group", "PROC_REA",
             ],
             target_col="custo_elevado",

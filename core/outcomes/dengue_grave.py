@@ -16,9 +16,12 @@ class DengueGrave(OutcomeConfig):
             name="Dengue com Sinais de Alarme ou Grave",
             description=(
                 "Prediz, a partir da notificação inicial de dengue, a probabilidade de evolução "
-                "para dengue com sinais de alarme (CLASSI_FIN=8) ou dengue grave (CLASSI_FIN=11). "
-                "Features incluem sintomas na notificação, idade, hospitalização e características "
-                "demográficas. Utiliza dados do SINAN-Dengue."
+                "para dengue com sinais de alarme (CLASSI_FIN=11) ou dengue grave (CLASSI_FIN=12), "
+                "entre os casos confirmados (CLASSI_FIN 10, 11 ou 12). "
+                "Features incluem sintomas na notificação, idade e características demográficas. "
+                "Sinais de alarme (ALRM_*), sinais de gravidade (GRAV_*) e hospitalização ficam "
+                "fora das preditoras: definem ou decorrem da classificação final. "
+                "Utiliza dados do SINAN-Dengue."
             ),
             data_sources=["SINAN_DENG"],
             observation_window_days=0,
@@ -30,8 +33,7 @@ class DengueGrave(OutcomeConfig):
                 "idade_anos", "CS_SEXO", "CS_RACA", "CS_ESCOL_N",
                 "FEBRE", "MIALGIA", "CEFALEIA", "EXANTEMA", "VOMITO",
                 "NAUSEA", "DOR_COSTAS", "PETEQUIA_N", "LEUCOPENIA",
-                "ALRM_ABDOM", "ALRM_VOM", "ALRM_SANG", "ALRM_LETAR",
-                "hospitalizado", "age_group",
+                "age_group",
             ],
             target_col="dengue_grave",
         )
@@ -42,6 +44,10 @@ class DengueGrave(OutcomeConfig):
         df = deng_prep.filter_confirmed(df)
         # Drop final classification columns to avoid leakage
         df = df.drop(columns=["CLASSI_FIN", "EVOLUCAO", "obito_dengue", "DT_OBITO"], errors="ignore")
+        # Sinais de alarme e de gravidade definem as classes 11 e 12; a internação
+        # é consequência da gravidade. Nenhum deles pode virar preditor.
+        vazamento = [c for c in df.columns if c.startswith(("ALRM_", "GRAV_"))]
+        df = df.drop(columns=vazamento + ["HOSPITALIZ", "hospitalizado"], errors="ignore")
         return df
 
     def build_features(self, cohort: pd.DataFrame) -> pd.DataFrame:

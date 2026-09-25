@@ -1723,7 +1723,7 @@ if not ss.get("model_config"):
         balancing = st.radio(
             "Balanceamento",
             ["Nenhum", "Class Weight", "SMOTE (oversample)", "SMOTE + Undersampling"],
-            index=1,
+            index=0,
             label_visibility="collapsed",
             help=(
                 "**Nenhum**: sem ajuste. "
@@ -2553,6 +2553,28 @@ if not ss["model_results"]:
             _hpo_folds = min(n_folds, 3) if val_strategy == "Validação cruzada (k-fold)" else 3
             _all_results = []
 
+            # Separa o teste ANTES da busca de hiperparâmetros: em holdout e no
+            # corte temporal a HPO vê só a partição de treino. No k-fold a HPO
+            # segue na coorte inteira (sem CV aninhada).
+            from core.models.pipeline import split_train_test as _split_train_test
+            _split_err = None
+            X_tr = X_te = y_tr = y_te = None
+            if val_strategy != "Validação cruzada (k-fold)":
+                try:
+                    if val_strategy == "Validação Temporal":
+                        X_tr, X_te, y_tr, y_te = _split_train_test(
+                            X_train, y_train, "temporal",
+                            dates=cohort[temporal_date_col], cutoff=temporal_cutoff,
+                        )
+                    else:
+                        X_tr, X_te, y_tr, y_te = _split_train_test(
+                            X_train, y_train, "holdout", holdout_size=holdout_size,
+                        )
+                except (ValueError, KeyError, TypeError) as _e:
+                    _split_err = str(_e)
+            X_hpo, y_hpo = (X_train, y_train) if X_tr is None else (X_tr, y_tr)
+            _hpo_seed = int(ss.get("sample_seed", 42))
+
             import numpy as _np
             from sklearn.metrics import (
                 roc_auc_score as _rauc, average_precision_score as _ap,
@@ -2576,11 +2598,13 @@ if not ss["model_results"]:
                             _p.progress(done / total,
                                         text=f"Optuna {_l}: {done}/{total} — AUC {best:.4f}")
                             _fms(_ph, f"Trial {done}/{total} — melhor AUC: {best:.4f}")
+                        if _split_err:
+                            raise ValueError(_split_err)
                         _params = optimize_hyperparams(
-                            X_train, y_train, algorithm=_algo,
+                            X_hpo, y_hpo, algorithm=_algo,
                             n_trials=n_trials, n_folds=_hpo_folds,
                             balancing=balancing, treatment=treatment,
-                            progress_callback=_opt_cb,
+                            progress_callback=_opt_cb, seed=_hpo_seed,
                         )
                         _mprog[_algo_lbl].progress(1.0, text=f"Optuna {_algo_lbl} concluído")
                         _mdetail[_algo_lbl].empty()
@@ -2597,8 +2621,10 @@ if not ss["model_results"]:
                                         text=f"Random Search {_l}: {done}/{total} — AUC {best:.4f}")
                             _fms(_ph, f"Iteração {done}/{total} — AUC: {best:.4f}")
                         with st.spinner(f"Random Search: {_algo_lbl}…"):
+                            if _split_err:
+                                raise ValueError(_split_err)
                             _params = random_search(
-                                X_train, y_train, algorithm=_algo,
+                                X_hpo, y_hpo, algorithm=_algo,
                                 n_iter=n_iter, n_folds=_hpo_folds,
                                 balancing=balancing, treatment=treatment,
                                 progress_callback=_rs_cb,
@@ -2610,8 +2636,10 @@ if not ss["model_results"]:
                         _ms_st(_mstatus[_algo_lbl], "manage_search",
                                "Grid Search — buscando hiperparâmetros…")
                         with st.spinner(f"Grid Search — {_algo_lbl}…"):
+                            if _split_err:
+                                raise ValueError(_split_err)
                             _params = grid_search(
-                                X_train, y_train, algorithm=_algo,
+                                X_hpo, y_hpo, algorithm=_algo,
                                 n_folds=_hpo_folds, balancing=balancing,
                                 treatment=treatment,
                             )
@@ -2631,20 +2659,9 @@ if not ss["model_results"]:
                         _ms_st(_mstatus[_algo_lbl], "model_training",
                                f"Treinando — corte temporal {temporal_cutoff}…")
                         with st.spinner(f"Treinando {_algo_lbl} · corte temporal {temporal_cutoff}…"):
-                            import pandas as _pd_t
-                            _dates = _pd_t.to_datetime(cohort[temporal_date_col], errors="coerce")
-                            _cutoff_ts = _pd_t.Timestamp(temporal_cutoff)
-                            _train_mask = _dates < _cutoff_ts
-                            _test_mask  = _dates >= _cutoff_ts
-                            if _train_mask.sum() < 10 or _test_mask.sum() < 5:
-                                raise ValueError(
-                                    f"Split temporal insuficiente: treino={_train_mask.sum()}, "
-                                    f"teste={_test_mask.sum()}. Ajuste a data de corte."
-                                )
-                            X_tr = X_train[_train_mask.values]
-                            y_tr = y_train[_train_mask.values]
-                            X_te = X_train[_test_mask.values]
-                            y_te = y_train[_test_mask.values]
+                            # X_tr/X_te já separados antes da HPO (_split_train_test)
+                            if _split_err:
+                                raise ValueError(_split_err)
                             _pipe = build_pipeline(X_tr, _algo, _params, balancing=balancing, treatment=treatment)
                             _pipe.fit(X_tr, y_tr)
                             _te_probs = _pipe.predict_proba(X_te)[:, 1]
@@ -2684,10 +2701,9 @@ if not ss["model_results"]:
                         _ms_st(_mstatus[_algo_lbl], "model_training",
                                f"Treinando — holdout {holdout_size:.0%}…")
                         with st.spinner(f"Treinando {_algo_lbl} · holdout {holdout_size:.0%}…"):
-                            X_tr, X_te, y_tr, y_te = train_test_split(
-                                X_train, y_train, test_size=holdout_size,
-                                stratify=y_train, random_state=42,
-                            )
+                            # X_tr/X_te já separados antes da HPO (_split_train_test)
+                            if _split_err:
+                                raise ValueError(_split_err)
                             _pipe = build_pipeline(X_tr, _algo, _params, balancing=balancing, treatment=treatment)
                             _pipe.fit(X_tr, y_tr)
                             _te_probs = _pipe.predict_proba(X_te)[:, 1]

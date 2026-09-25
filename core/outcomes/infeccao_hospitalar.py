@@ -16,8 +16,9 @@ class InfeccaoHospitalar(OutcomeConfig):
             name="Infecção Hospitalar",
             description=(
                 "Prediz o risco de infecção hospitalar adquirida durante a internação "
-                "(campo INFEHOSP do SIH-RD). Features incluem diagnóstico de admissão, "
-                "tempo de permanência, uso de UTI e características do paciente."
+                "(campo INFEHOSP do SIH-RD). Features incluem diagnóstico de admissão "
+                "e características do paciente. Permanência e uso de UTI ficam fora das "
+                "preditoras: só existem na alta."
             ),
             data_sources=["SIH"],
             observation_window_days=0,
@@ -26,8 +27,8 @@ class InfeccaoHospitalar(OutcomeConfig):
             icon="🦠",
             estimated_download_min=10,
             suggested_features=[
-                "IDADE", "SEXO", "diag_chapter", "used_icu",
-                "length_of_stay_days", "CAR_INT", "RACA_COR",
+                "IDADE", "SEXO", "diag_chapter",
+                "CAR_INT", "RACA_COR",
                 "age_group", "PROC_REA",
             ],
             target_col="infeccao_hospitalar",

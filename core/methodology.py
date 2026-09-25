@@ -38,15 +38,15 @@ METHODOLOGY: dict[str, dict] = {
         "pull": "Baixa SINASC (nascimentos) e SIM (óbitos) do estado/ano. Filtra no SIM os óbitos neonatais (idade em horas/dias ≤ 28) e marca os nascimentos cuja chave aparece entre esses óbitos.",
         "target": "Óbito até 28 dias de vida.",
         "linkage": "Linkage determinístico SINASC ↔ SIM pela chave DTNASC + SEXO + PESO. Pareamento por quase-identificadores, já que o dado público não traz identificador direto do recém-nascido.",
-        "caveat": "Prevalência baixa; considere balanceamento.",
+        "caveat": "Em desenvolvimento: o linkage por DTNASC + SEXO + PESO deixa chaves nulas casarem entre si e não impõe pareamento 1:1, o que infla os óbitos. Prevalência baixa; considere balanceamento.",
     },
     "permanencia_prolongada": {
-        "pull": "Base SIH-RD (internações) do estado/ano. Tempo de permanência calculado de DT_INTER a DT_SAIDA.",
+        "pull": "Base SIH-RD (internações) do estado/ano. Tempo de permanência calculado de DT_INTER a DT_SAIDA. Uso de UTI sai das preditoras: só existe na alta.",
         "target": "Internação com mais de 15 dias de permanência.",
     },
     "uso_uti": {
         "pull": "Base SIH-RD do estado/ano (mensal e pesada; use estados menores ou max_rows controlado). Todas as colunas de UTI (UTI_MES_TO, VAL_UTI, MARCA_UTI, etc.) E o VAL_TOT saem das preditoras: o valor total da AIH soma o custo de UTI, então seria vazamento.",
-        "target": "A internação utilizou UTI, derivado de UTI_MES_TO > 0 (dias-UTI no mês). Features de admissão: idade, sexo, CID principal (capítulo/bloco), permanência, caráter da internação, raça e procedimento realizado.",
+        "target": "A internação utilizou UTI, derivado de UTI_MES_TO > 0 (dias-UTI no mês). Features: idade, sexo, CID principal (capítulo/bloco), caráter da internação, raça e procedimento realizado. A permanência sai das preditoras: só existe na alta.",
         "caveat": "VAL_TOT foi excluído por conter o custo de UTI (vazamento). O procedimento (PROC_REA) é o preditor dominante.",
     },
     "infeccao_hospitalar": {
@@ -55,14 +55,14 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "Por ser proxy, subestima a incidência real de infecção hospitalar.",
     },
     "custo_elevado": {
-        "pull": "Base SIH-RD do estado/ano. O custo é o valor total da AIH (VAL_TOT).",
+        "pull": "Base SIH-RD do estado/ano. O custo é o valor total da AIH (VAL_TOT). Permanência e uso de UTI saem das preditoras: só existem na alta.",
         "target": "Custo acima do percentil 90 da própria amostra (decil superior).",
         "caveat": "Por construção (decil superior), a prevalência é ~10%.",
     },
     "mortalidade_hospitalar": {
-        "pull": "Base SIH-RD do estado/ano. O alvo é a morte registrada na própria AIH.",
-        "target": "Óbito durante a internação (campo MORTE do SIH = 1).",
-        "linkage": "O óbito intra-hospitalar vem direto do campo MORTE da AIH. O link com o SIM por quase-identificadores entra como reforço quando disponível.",
+        "pull": "Base SIH-RD do estado/ano. O alvo é a morte registrada na própria AIH. Permanência, uso de UTI, diárias e valor total saem das preditoras, porque só existem na alta.",
+        "target": "Óbito intra-hospitalar (campo MORTE do SIH = 1).",
+        "linkage": "O alvo vem só do campo MORTE da AIH. O linkage com o SIM por quase-identificadores não pareia no dado público e não altera o alvo.",
     },
     "readmissao_30d": {
         "pull": "Base SIH-RD do estado/ano. Self-linkage temporal entre alta e novas internações do mesmo paciente, com merge_asof (vetorizado).",
@@ -71,16 +71,19 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "A detecção exige ambas as internações na amostra: use amostra grande (≥ 30.000). Amostras pequenas quebram os pares e subestimam a readmissão.",
     },
     "abandono_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados (situação de encerramento conhecida).",
-        "target": "Encerramento por abandono de tratamento (SITUA_ENCE = abandono).",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados com situação de encerramento conhecida. Transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log.",
+        "target": "Encerramento por abandono (SITUA_ENCE = 2) ou abandono primário (SITUA_ENCE = 10). Cura (1), óbito por TB (3), óbito por outras causas (4) e falência (9) são negativos.",
+        "caveat": "Mapa de SITUA_ENCE conferido com o dicionário do SINAN-TB usado no PySUS e no sinan-continual-learning, mas ainda não contra um arquivo TUBEBR bruto.",
     },
     "obito_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
-        "target": "Óbito ao encerramento do caso (SITUA_ENCE = 2, por TB ou outra causa). Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; transferência, mudança de diagnóstico, TB-DR e mudança de esquema (SITUA_ENCE 5 a 8) são censura e saem da coorte. SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
+        "target": "Óbito ao encerramento do caso, por TB (SITUA_ENCE = 3) ou por outras causas (SITUA_ENCE = 4). Cura, abandono, falência e abandono primário são negativos. Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
+        "caveat": "Óbito por outras causas conta como positivo; tratá-lo como risco competitivo é decisão metodológica ainda em aberto.",
     },
     "abandono_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos encerrados.",
         "target": "Saída por abandono de tratamento (TPALTA_N = 3).",
+        "caveat": "O código de abandono em TPALTA_N ainda não foi conferido com o dicionário oficial do SINAN-Hanseníase; o resultado deste desfecho depende dessa conferência.",
     },
     "incapacidade_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). AVALIA_N/grau_incapacidade (fonte do alvo) e colunas pós-tratamento (TPALTA_N, doses) saem das preditoras.",
@@ -88,11 +91,12 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "Desfecho moderadamente desbalanceado; AUC modesta (~0,65) por ser predição de detecção tardia a partir de características de base.",
     },
     "dengue_grave": {
-        "pull": "Base SINAN-Dengue (nacional, filtrada por UF; arquivo grande, 1º download mais lento). CLASSI_FIN sai das preditoras; sinais de alarme ALRM_* entram como features.",
-        "target": "Classificação final com sinais de alarme (CLASSI_FIN = 8) ou dengue grave (CLASSI_FIN = 11).",
+        "pull": "Base SINAN-Dengue (nacional, filtrada por UF; arquivo grande, 1º download mais lento). CLASSI_FIN, sinais de alarme (ALRM_*), sinais de gravidade (GRAV_*) e hospitalização saem das preditoras: definem ou decorrem da classificação final.",
+        "target": "Classificação final com sinais de alarme (CLASSI_FIN = 11) ou dengue grave (CLASSI_FIN = 12). Coorte = dengue confirmada (CLASSI_FIN 10, 11 ou 12); descartado (5), inconclusivo (8) e chikungunya (13) saem.",
+        "caveat": "Códigos do layout 2014 em diante. Notificações no layout anterior (CLASSI_FIN 1 a 4) ficam fora da coorte.",
     },
     "chikungunya_hospitalizado": {
-        "pull": "Base SINAN-Chikungunya (nacional, filtrada por UF). Coorte = casos confirmados.",
+        "pull": "Base SINAN-Chikungunya (nacional, filtrada por UF). Coorte = casos confirmados. Sinais de alarme (ALRM_*) saem das preditoras, porque são critério de internação.",
         "target": "Necessidade de hospitalização (HOSPITALIZ = 1).",
     },
     "obito_aids": {

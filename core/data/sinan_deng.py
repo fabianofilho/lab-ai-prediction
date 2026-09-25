@@ -13,7 +13,7 @@ KEEP_COLS = [
     "NU_IDADE_N", "CS_SEXO", "CS_RACA", "CS_ESCOL_N",
     "ID_MN_RESI",
     # Clinical
-    "CLASSI_FIN",      # final classification: 10=dengue, 8=c/ sinais alarme, 11=grave, 12=descartado
+    "CLASSI_FIN",      # classificação final: ver CLASSI_* abaixo (layout 2014 em diante)
     "EVOLUCAO",        # 1=cure, 2=death by dengue, 3=death other, 9=unknown
     "HOSPITALIZ",      # hospitalized: 1=yes, 2=no
     "DT_OBITO",
@@ -27,10 +27,20 @@ KEEP_COLS = [
     "GRAV_HIPOT", "GRAV_CONV", "HEPATOPAT", "GRAV_INSUF",
 ]
 
-# CLASSI_FIN codes
+# CLASSI_FIN no layout vigente da ficha de arboviroses (2014 em diante),
+# conferido com o microdatasus (process_sinan_dengue.R) e com
+# sinan-continual-learning (core/diseases/dengue.py, CLASSIFICACAO):
+# 5 descartado, 8 inconclusivo, 10 dengue, 11 dengue com sinais de alarme,
+# 12 dengue grave, 13 chikungunya. O layout anterior a 2014 (códigos 1 a 4)
+# não é tratado: esses casos ficam fora da coorte.
+CLASSI_DESCARTADO = "5"
+CLASSI_INCONCLUSIVO = "8"
 CLASSI_DENGUE = "10"
-CLASSI_ALARME = "8"
-CLASSI_GRAVE = "11"
+CLASSI_ALARME = "11"
+CLASSI_GRAVE = "12"
+CLASSI_CHIKUNGUNYA = "13"
+# Coorte = dengue confirmada; 5, 8 e 13 saem.
+CLASSI_CONFIRMADO = {CLASSI_DENGUE, CLASSI_ALARME, CLASSI_GRAVE}
 
 # EVOLUCAO codes
 EVOLUCAO_OBITO_DENGUE = "2"
@@ -70,7 +80,7 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     if "CLASSI_FIN" in df.columns:
         classi = df["CLASSI_FIN"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         df["dengue_grave"] = classi.isin([CLASSI_ALARME, CLASSI_GRAVE]).astype(int)
-        df["dengue_confirmado"] = classi.isin([CLASSI_DENGUE, CLASSI_ALARME, CLASSI_GRAVE]).astype(int)
+        df["dengue_confirmado"] = classi.isin(CLASSI_CONFIRMADO).astype(int)
 
     if "EVOLUCAO" in df.columns:
         evolucao = df["EVOLUCAO"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)

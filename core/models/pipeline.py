@@ -503,8 +503,14 @@ def optimize_hyperparams(
     balancing: str = "none",
     treatment: dict | None = None,
     progress_callback=None,
+    seed: int | None = 42,
 ) -> dict:
-    """Run Optuna hyperparameter search. Returns best params dict."""
+    """Run Optuna hyperparameter search. Returns best params dict.
+
+    `seed` semeia o TPESampler: mesma semente e mesmos dados dão os mesmos
+    hiperparâmetros. Em holdout e corte temporal, passe só a partição de
+    treino (ver split_train_test), nunca a coorte inteira.
+    """
     try:
         import optuna
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -531,7 +537,10 @@ def optimize_hyperparams(
             progress_callback(completed[0], n_trials, float(np.mean(scores)))
         return float(np.mean(scores))
 
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=seed),
+    )
     study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
     best = dict(study.best_params)
     # MLP: hidden_layer_sizes é sugerido como string categórica ("64,32") —
@@ -540,6 +549,44 @@ def optimize_hyperparams(
     if isinstance(_hl, str):
         best["hidden_layer_sizes"] = tuple(int(x) for x in _hl.split(","))
     return best
+
+
+def split_train_test(
+    X: pd.DataFrame,
+    y: pd.Series,
+    strategy: str,
+    holdout_size: float = 0.2,
+    dates: pd.Series | None = None,
+    cutoff=None,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """Separa treino e teste ANTES de qualquer busca de hiperparâmetros.
+
+    strategy:
+        "holdout"  : train_test_split estratificado com `holdout_size`.
+        "temporal" : treino = `dates` < `cutoff`, teste = `dates` >= `cutoff`
+                     (`dates` alinhado por posição com X).
+
+    Devolve X_tr, X_te, y_tr, y_te. A HPO deve receber só X_tr e y_tr.
+    """
+    if strategy == "temporal":
+        d = pd.to_datetime(pd.Series(dates), errors="coerce")
+        cut = pd.Timestamp(cutoff)
+        train_mask = (d < cut).to_numpy()
+        test_mask = (d >= cut).to_numpy()
+        if train_mask.sum() < 10 or test_mask.sum() < 5:
+            raise ValueError(
+                f"Split temporal insuficiente: treino={int(train_mask.sum())}, "
+                f"teste={int(test_mask.sum())}. Ajuste a data de corte."
+            )
+        return X[train_mask], X[test_mask], y[train_mask], y[test_mask]
+    if strategy == "holdout":
+        from sklearn.model_selection import train_test_split
+        X_tr, X_te, y_tr, y_te = train_test_split(
+            X, y, test_size=holdout_size, stratify=y, random_state=random_state,
+        )
+        return X_tr, X_te, y_tr, y_te
+    raise ValueError(f"strategy desconhecida: {strategy!r} (use 'holdout' ou 'temporal')")
 
 
 def train_cv(

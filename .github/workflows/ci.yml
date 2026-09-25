@@ -21,8 +21,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest ruff
-          # apenas o necessário para os testes offline (sem o stack pesado de ML)
-          pip install pandas numpy
+          # apenas o necessário para os testes offline (sem o stack pesado de ML).
+          # scikit-learn e optuna cobrem split e HPO (tests/test_validacao.py);
+          # requests e pyarrow cobrem o upload (tests/test_upload.py).
+          pip install pandas numpy scikit-learn optuna requests pyarrow
 
       - name: Lint (ruff)
         run: ruff check core pages tests || true

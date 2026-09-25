@@ -51,7 +51,9 @@
     "n": 1439,
     "n_features": 13,
     "pos": 222,
-    "neg": 1217
+    "neg": 1217,
+    "rotulo_invalido": true,
+    "aviso": "Rótulo inválido: sample gerado com SITUA_ENCE trocado (abandono_tb marcava óbito por TB e obito_tb marcava abandono). Indisponível até ser regenerado com o mapa corrigido."
   },
   "abandono_tb": {
     "system": "SINAN_TB",
@@ -60,6 +62,8 @@
     "n": 1439,
     "n_features": 13,
     "pos": 74,
-    "neg": 1365
+    "neg": 1365,
+    "rotulo_invalido": true,
+    "aviso": "Rótulo inválido: sample gerado com SITUA_ENCE trocado (abandono_tb marcava óbito por TB e obito_tb marcava abandono). Indisponível até ser regenerado com o mapa corrigido."
   }
 }

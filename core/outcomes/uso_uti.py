@@ -39,7 +39,7 @@ class UsoUTI(OutcomeConfig):
             estimated_download_min=10,
             suggested_features=[
                 "IDADE", "SEXO", "diag_chapter", "diag_block",
-                "length_of_stay_days", "CAR_INT", "RACA_COR",
+                "CAR_INT", "RACA_COR",
                 "PROC_REA", "age_group",
             ],
             target_col="uso_uti",
