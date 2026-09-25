@@ -19,31 +19,29 @@ Agente autonomo para executar pipeline ML com dados do DataSUS.
 
 ### 2. Download (se necessario)
 
-Seguir estrategia de download:
-
-1. Cache local (data/raw/)
-2. HTTP mirror (ftp2.datasus.gov.br)
-3. FTP direto
-4. MCP datasus-mcp
+Usar `fetch(sistema, UF, ano)` de `core/data/downloader.py`, que faz a cascata descrita na skill `datasus-download` (cache em data/raw/, pySUS se instalado, mirror HTTP da DigitalOcean, FTP do DataSUS).
 
 ### 3. Preprocessar
 
-- Carregar dados com CohortBuilder (se disponivel)
+- Montar a coorte com `CohortBuilder(OUTCOMES[chave]).build(raw)` e tirar `X, y` com `.get_Xy(cohort)`
 - Aplicar data_dict para nomes canonicos
 - Feature engineering conforme datasus-features
-- Tratar missing, encoding, normalizacao
+- Missing, sentinelas, encoding e escala pelo `treatment` descrito na skill `datasus-pipeline`, com as decisoes do CP3 e do CP4 da skill `ml-checkpoints` do labskills
 
 ### 4. Treinar
 
-- Cross-validation estratificada
-- Modelos: XGBoost, LightGBM, LogisticRegression
-- Hyperparameter tuning com Optuna (se configurado)
+Seguir a API da skill `datasus-pipeline` e as decisoes da `ml-checkpoints`, que e a norma de metodo do lab:
+
+- Separar com `split_train_test` antes de qualquer busca de hiperparametros; `train_cv` para validacao cruzada
+- Modelos: as chaves de `ALGORITHMS`; candidatos e baseline pelo CP6
+- Balanceamento: `balancing="none"` por padrao; qualquer outro valor so com a calibracao medida com e sem ele (CP5 e CP9)
+- Hyperparameter tuning com Optuna (se configurado), so na particao de treino
 
 ### 5. Avaliar
 
-- Metricas: AUC-ROC, F1, Brier score, calibracao
+- Seguir a skill `datasus-avaliacao` e o CP8 a CP10 da `ml-checkpoints`: metrica principal escolhida antes de rodar, calibracao e decision curve
 - Fairness por subgrupo (se aplicavel)
-- Comparar com baselines
+- Comparar com a baseline
 
 ### 6. Retornar
 

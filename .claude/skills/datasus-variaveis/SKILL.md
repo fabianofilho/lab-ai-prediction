@@ -97,7 +97,7 @@ A análise de equidade (`pages/analise.py`) detecta automaticamente qual está p
 | Localização  | `UF_SIGLA` | `UF_SIGLA`    | —         |
 | Faixa etária | `age_group`| `age_group_mae`| `age_group` |
 
-Ao adicionar suporte a nova base, incluir os equivalentes em `_fairness_candidates` em `pages/analise.py`.
+A detecção usa a lista `_fairness_candidates` de `pages/analise.py`, que hoje não inclui `RACACORMAE` nem `age_group_mae`: para o SINASC a tela só oferece `SEXO` e `UF_SIGLA`. Ao adicionar suporte a nova base, incluir os equivalentes em `_fairness_candidates`.
 
 ---
 

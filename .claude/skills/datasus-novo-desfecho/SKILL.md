@@ -14,11 +14,11 @@ core/outcomes/
 └── {novo_desfecho}.py
 ```
 
-A UI em `app.py` lê `OUTCOME_GROUPS` de `core/outcomes/__init__.py` (não de `app.py`).
+A etapa de análise (`pages/analise.py`) lê `OUTCOMES` e `OUTCOME_GROUPS` de `core/outcomes/__init__.py`. O catálogo de cards do DATASUS fica em `pages/datasus.py`, com um `OUTCOME_GROUPS` próprio (Passo 3).
 
 ---
 
-## Passo 1 — Criar `core/outcomes/{chave}.py`
+## Passo 1: criar `core/outcomes/{chave}.py`
 
 ```python
 """Descrição curta — BASE (ex: SINASC)."""
@@ -73,7 +73,7 @@ class NomeClasse(OutcomeConfig):
 
 ---
 
-## Passo 2 — Registrar em `core/outcomes/__init__.py`
+## Passo 2: registrar em `core/outcomes/__init__.py`
 
 Adicionar entrada no dicionário `_REGISTRY`:
 
@@ -100,9 +100,9 @@ OUTCOME_GROUPS: dict[str, list[str]] = {
 
 ---
 
-## Passo 3 — Adicionar em `app.py`
+## Passo 3: adicionar o card em `pages/datasus.py`
 
-O `app.py` tem seu próprio `OUTCOME_GROUPS` dict (separado do de `__init__.py`) para a tela inicial. Adicionar o card ao grupo correspondente:
+O `pages/datasus.py` tem seu próprio `OUTCOME_GROUPS` (separado do de `__init__.py`), com os cards do catálogo DATASUS. Adicionar o card ao grupo correspondente:
 
 ```python
 {
@@ -116,6 +116,14 @@ O `app.py` tem seu próprio `OUTCOME_GROUPS` dict (separado do de `__init__.py`)
     "note":    "Nota curta sobre a base e disponibilidade.",
 },
 ```
+
+---
+
+## Passo 4: metodologia e testes
+
+- `core/methodology.py`: entrada em `METHODOLOGY` com a chave do desfecho e, no mínimo, `"pull"` (como o dado é puxado e a coorte montada) e `"target"` (como o rótulo é derivado); `"linkage"` e `"caveat"` são opcionais. É o painel Metodologia do card.
+- `tests/test_invariants.py`: incluir em `LEAK_BLACKLIST` as colunas que definem o alvo. Os testes exigem que todo desfecho do registro esteja num grupo, tenha metodologia e não tenha coluna da lista em `suggested_features`.
+- Rodar `pytest -m "not network" -q`.
 
 ---
 
@@ -133,11 +141,11 @@ O `app.py` tem seu próprio `OUTCOME_GROUPS` dict (separado do de `__init__.py`)
 | data_sources key | Preprocessador            | Arquivo DBC         |
 |------------------|---------------------------|---------------------|
 | SINASC           | `core.data.sinasc`        | DN{UF}{ano}.dbc     |
-| SIH              | `core.data.sih`           | RD{UF}{ano}{mes}.dbc|
+| SIH              | `core.data.sih`           | RD{UF}{aa}{mm}.dbc  |
 | SIM              | `core.data.sim`           | DO{UF}{ano}.dbc     |
 | SINAN_TB         | `core.data.sinan`         | TUBEBR{ano}.dbc     |
 | SINAN_HANS       | `core.data.sinan_hans`    | HANSBR{ano}.dbc     |
-| SINAN_DENG       | `core.data.sinan_deng` (ou similar) | DENGBR{ano}.dbc |
+| SINAN_DENG       | `core.data.sinan_deng`    | DENGBR{ano}.dbc     |
 | SINAN_AIDS       | `core.data.sinan_aids`    | AIDABR{ano}.dbc     |
 | SINAN_SIFA       | `core.data.sinan_sifa`    | SIFABR{ano}.dbc     |
 | SINAN_VIOL       | `core.data.sinan_viol`    | VIOLBR{ano}.dbc     |
