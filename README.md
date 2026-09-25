@@ -44,6 +44,16 @@ Plataforma sem código para epidemiologistas, residentes e cientistas de dados r
 
 ---
 
+## Repositório canônico
+
+Este é o app canônico do laboratório para modelagem preditiva com microdados do DataSUS. Correções, desfechos novos e as skills do app entram aqui, e os outros repositórios do lab apontam para cá.
+
+- **Linhagens anteriores.** O [fabianofilho/datasus-ai-prediction](https://github.com/fabianofilho/datasus-ai-prediction) e o fork [labdaps/datasus-ai-prediction](https://github.com/labdaps/datasus-ai-prediction) são linhagens anteriores e ficam arquivadas, somente leitura: não recebem correção. Este repositório começou como cópia do datasus-ai-prediction, com histórico novo, por isso não há merge nem sincronização de fork entre eles.
+- **Procedência do benchmark.** O commit `b79bc78` do datasus-ai-prediction continua acessível no repositório arquivado e segue sendo a procedência do código vendorizado no datasus-preprocessing-benchmark. Essa referência não muda de repositório nem de SHA.
+- **Organização.** Está prevista a transferência deste repositório para a organização [labdaps](https://github.com/labdaps). O GitHub redireciona o endereço antigo, então clones e links atuais continuam valendo.
+
+---
+
 ## DATASUS — 22 desfechos
 
 Download automático com cache local. Todos os desfechos têm pipeline pronto
