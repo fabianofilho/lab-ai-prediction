@@ -18,7 +18,7 @@ Ordem real de `fetch(system, state, year, progress_callback=None, max_rows=None)
 
 1. pySUS, se estiver instalado (_try_pysus)
    Só SIH, SIM, SINASC e SINAN_TB. Não está no requirements.txt (linha comentada),
-   então no deploy e no CI esse passo falha e a cascata segue.
+   então onde não foi instalado à parte, como no deploy, o passo falha e a cascata segue.
 
 2. HTTP mirror (DigitalOcean CDN), constante HTTP_MIRROR
    https://datasus-ftp-mirror.nyc3.cdn.digitaloceanspaces.com/{path}
