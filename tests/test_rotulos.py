@@ -103,6 +103,19 @@ def test_tb_codigo_bruto_com_espaco_e_float():
     assert df["obito_tb"].tolist() == [0.0, 0.0, 0.0, 1.0, 0.0]
 
 
+def test_tb_codigo_com_zero_a_esquerda():
+    # Desde o helper comum (96cb137), "02" é o mesmo código que "2". Na Onda 0
+    # o código com zero à esquerda caía fora do mapa e saía como sem código.
+    df = tb_prep.preprocess(_tb_raw(["01", "02", "03", "05", "09", "10"]))
+    abandono = df["abandono"].tolist()
+    assert [abandono[i] for i in (0, 1, 4, 5)] == [0.0, 1.0, 0.0, 1.0]
+    assert np.isnan(abandono[2]) and np.isnan(abandono[3]), "óbito e transferência são censura"
+    assert df["obito_tb"].iloc[[0, 1, 2, 4, 5]].tolist() == [0.0, 0.0, 1.0, 0.0, 0.0]
+
+    cohort = AbandonoTB().build_cohort({"SINAN_TB": _tb_raw(["01", "02", "03", "05", "09", "10"])})
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 2, "sem_codigo": 0, "mantidos": 4}
+
+
 def test_tb_positivos_e_censura_sao_os_do_dicionario():
     assert tb_prep.SITUA_ABANDONO == {"2", "10"}
     assert tb_prep.SITUA_OBITO == {"3", "4"}
