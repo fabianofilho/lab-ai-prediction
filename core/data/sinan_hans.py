@@ -16,8 +16,8 @@ KEEP_COLS = [
     # Clinical
     "FORMACLINI",      # forma clínica: 1=indeterminada, 2=tuberculoide, 3=dimorfa, 4=virchowiana
     "CLASSOPERA",      # classificação operacional: 1=paucibacilar (PB), 2=multibacilar (MB)
-    "MODOENTR",        # entry mode: 1=new case, 2=transfer, etc.
-    "MODODETECT",      # detection mode: 1=demand, 2=active, etc.
+    "MODOENTR",        # modo de entrada: 1=caso novo, 2 a 5=transferência, 6=recidiva, 7=outros reingressos, 9=ignorado
+    "MODODETECT",      # modo de detecção do caso novo: 1=encaminhamento, 2=demanda espontânea, 3=exame de coletividade, 4=exame de contatos, 5=outros, 9=ignorado
     "BACILOSCOP",      # baciloscopy: 0=neg, 1=pos, 2=not done
     "ESQ_INI_N",       # initial treatment scheme: 1=PB 6 doses, 2=MB 12 doses
     "AVALIA_N",        # grau de incapacidade no diagnóstico: ver AVALIA_N_MAPA

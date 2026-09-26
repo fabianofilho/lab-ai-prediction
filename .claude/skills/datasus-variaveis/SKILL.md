@@ -97,6 +97,8 @@ A análise de equidade (`pages/analise.py`) detecta automaticamente qual está p
 | Localização  | `UF_SIGLA` | `UF_SIGLA`    | —         |
 | Faixa etária | `age_group`| `age_group_mae`| `age_group` |
 
+O código de raça/cor não é o mesmo entre as bases: no `RACA_COR` do SIH, 3 é parda e 4 é amarela; no `RACACORMAE` do SINASC, no `RACACOR` do SIM e no `CS_RACA` do SINAN, 3 é amarela e 4 é parda (microdatasus 3.0.0: `process_sih.R`, `process_sinasc.R`, `process_sim.R` e `process_sinan_dengue.R`). Não compare nem junte bases pelo código sem traduzir antes; o `core/features/data_dict.py` descreve cada base com o seu código.
+
 A detecção usa a lista `_fairness_candidates` de `pages/analise.py`, que hoje não inclui `RACACORMAE` nem `age_group_mae`: para o SINASC a tela só oferece `SEXO` e `UF_SIGLA`. Ao adicionar suporte a nova base, incluir os equivalentes em `_fairness_candidates`.
 
 ---

@@ -19,6 +19,7 @@ from core.data import sinan_chik as chik_prep
 from core.data import sinan_deng as deng_prep
 from core.data import sinan_hans as hans_prep
 from core.data import sinan_iexo as iexo_prep
+from core.features.data_dict import FEATURE_DICT
 from core.outcomes.abandono_hanseniase import AbandonoHanseniase
 from core.outcomes.abandono_tb import AbandonoTB
 from core.outcomes.dengue_grave import DengueGrave
@@ -490,3 +491,27 @@ def test_aids_get_target_nao_preenche_censura_com_zero():
     oc = ObitoAIDS()
     with pytest.raises(ValueError, match="censura"):
         oc.get_target(pd.DataFrame({oc.target_col: [1.0, np.nan]}))
+
+
+# ── Dicionário de dados exibido na tela (core/features/data_dict.py) ─────────
+
+def test_data_dict_raca_cor_do_sih_tem_parda_em_3():
+    # microdatasus 3.0.0, R/process_sih.R: no SIH, 3 é parda e 4 é amarela
+    valores = FEATURE_DICT["RACA_COR"]["values"]
+    assert valores["3"] == "Parda"
+    assert valores["4"] == "Amarela"
+    assert "Parda (3), Amarela (4)" in FEATURE_DICT["RACA_COR"]["desc"]
+
+
+def test_data_dict_modo_de_entrada_e_deteccao_da_hanseniase():
+    # PySUS 0.15.0, HANS.csv, campos 38 e 39
+    assert FEATURE_DICT["MODOENTR"]["values"] == {
+        "1": "Caso novo", "2": "Transferência do mesmo município",
+        "3": "Transferência de outro município", "4": "Transferência de outro estado",
+        "5": "Transferência de outro país", "6": "Recidiva", "7": "Outros reingressos",
+        "9": "Ignorado",
+    }
+    assert FEATURE_DICT["MODODETECT"]["values"] == {
+        "1": "Encaminhamento", "2": "Demanda espontânea", "3": "Exame de coletividade",
+        "4": "Exame de contatos", "5": "Outros modos", "9": "Ignorado",
+    }

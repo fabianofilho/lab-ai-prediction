@@ -166,9 +166,11 @@ _SIH: dict[str, dict] = {
     },
     "RACA_COR": {
         "label": "Raça/Cor do Paciente",
-        "desc": "Classificação étnico-racial do paciente internado: Branca (1), Preta (2), Amarela (3), Parda (4), Indígena (5).",
+        # No SIH, 3 é parda e 4 é amarela, ao contrário do SINASC, do SIM e do
+        # SINAN (microdatasus 3.0.0, R/process_sih.R, conferido em 2026-09-26).
+        "desc": "Classificação étnico-racial do paciente internado: Branca (1), Preta (2), Parda (3), Amarela (4), Indígena (5); 0 e 99 são sem informação. No SIH, 3 e 4 têm ordem inversa à do SINASC e do SIM.",
         "type": "Categórica",
-        "values": {"1": "Branca", "2": "Preta", "3": "Amarela", "4": "Parda", "5": "Indígena"},
+        "values": {"1": "Branca", "2": "Preta", "3": "Parda", "4": "Amarela", "5": "Indígena"},
     },
     "CAR_INT": {
         "label": "Caráter da Internação",
@@ -420,17 +422,27 @@ _SINAN_HANS: dict[str, dict] = {
         "type": "Ordinal",
         "values": {"0": "Grau 0", "1": "Grau 1", "2": "Grau 2"},
     },
+    # MODOENTR (campo 38) e MODODETECT (campo 39): dicionário do
+    # SINAN-Hanseníase, PySUS 0.15.0, pysus/metadata/SINAN/HANS.csv.
     "MODOENTR": {
         "label": "Modo de Entrada",
-        "desc": "Como o caso entrou no sistema: Caso novo (1), Recidiva (2), Transferência (3), Outros (4).",
+        "desc": "Como o caso entrou no sistema: Caso novo (1), Transferência do mesmo município (2), Transferência de outro município (3), Transferência de outro estado (4), Transferência de outro país (5), Recidiva (6), Outros reingressos (7), Ignorado (9).",
         "type": "Categórica",
-        "values": {"1": "Caso novo", "2": "Recidiva", "3": "Transferência", "4": "Outros"},
+        "values": {
+            "1": "Caso novo", "2": "Transferência do mesmo município",
+            "3": "Transferência de outro município", "4": "Transferência de outro estado",
+            "5": "Transferência de outro país", "6": "Recidiva", "7": "Outros reingressos",
+            "9": "Ignorado",
+        },
     },
     "MODODETECT": {
         "label": "Modo de Detecção",
-        "desc": "Como a doença foi descoberta: Demanda espontânea (1), Exame de contatos (2), Exame coletivo (3), Outros (4).",
+        "desc": "Como o caso novo foi descoberto (só preenchido quando MODOENTR = 1): Encaminhamento (1), Demanda espontânea (2), Exame de coletividade (3), Exame de contatos (4), Outros modos (5), Ignorado (9).",
         "type": "Categórica",
-        "values": {"1": "Demanda espontânea", "2": "Exame de contatos", "3": "Exame coletivo", "4": "Outros"},
+        "values": {
+            "1": "Encaminhamento", "2": "Demanda espontânea", "3": "Exame de coletividade",
+            "4": "Exame de contatos", "5": "Outros modos", "9": "Ignorado",
+        },
     },
     "BACILOSCOP": {
         "label": "Baciloscopia",
