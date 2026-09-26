@@ -6,6 +6,8 @@ import logging
 
 import pandas as pd
 
+from core.data import rotulo
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,10 +62,20 @@ SITUA_ENCE_MAPA = {
 SITUA_CURA = {"1"}
 SITUA_ABANDONO = {"2", "10"}   # abandono e abandono primário
 SITUA_OBITO = {"3", "4"}       # óbito por TB e óbito por outras causas
+SITUA_FALENCIA = {"9"}
 # Censura: o caso saiu de vista (transferência) ou deixou de ser o tratamento
 # acompanhado (mudança de diagnóstico, TB-DR, mudança de esquema). Esses casos
 # saem da coorte do desfecho e nunca viram 0.
 SITUA_CENSURA = {"5", "6", "7", "8"}
+
+# Negativos de cada alvo. O que não é positivo, negativo nem censura (em
+# branco, código fora do dicionário) também fica sem rótulo.
+SITUA_NEGATIVO_ABANDONO = SITUA_CURA | SITUA_OBITO | SITUA_FALENCIA
+SITUA_NEGATIVO_OBITO = SITUA_CURA | SITUA_ABANDONO | SITUA_FALENCIA
+CENSURA_POR_ALVO = {
+    "abandono": SITUA_CENSURA,
+    "obito_tb": SITUA_CENSURA,
+}
 
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
@@ -83,10 +95,10 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     # Alvos binários com censura: 1 positivo, 0 negativo e NaN para censura
     # ou código fora do dicionário (ver drop_censored).
     if "SITUA_ENCE" in df.columns:
-        situacao = _codigo(df["SITUA_ENCE"])
-        df["abandono"] = _alvo_com_censura(situacao, SITUA_ABANDONO)
+        situacao = rotulo.codigo(df["SITUA_ENCE"])
+        df["abandono"] = rotulo.alvo_com_censura(situacao, SITUA_ABANDONO, SITUA_NEGATIVO_ABANDONO)
         df["cura"] = situacao.isin(SITUA_CURA).astype(int)
-        df["obito_tb"] = _alvo_com_censura(situacao, SITUA_OBITO)
+        df["obito_tb"] = rotulo.alvo_com_censura(situacao, SITUA_OBITO, SITUA_NEGATIVO_OBITO)
 
     # DOT (tratamento supervisionado)
     if "TRAT_SUPER" in df.columns:
@@ -114,48 +126,13 @@ def filter_closed_cases(df: pd.DataFrame) -> pd.DataFrame:
 def drop_censored(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
     """Tira da coorte os casos sem rótulo do desfecho `target_col`.
 
-    Sai quem tem SITUA_ENCE de censura (5 a 8) ou código fora do dicionário
-    (em branco, ignorado). As contagens ficam em
-    ``df.attrs["exclusoes_rotulo"]`` e no log, para que a exclusão seja
-    visível em vez de silenciosa.
+    Sai quem tem SITUA_ENCE de censura do alvo (``CENSURA_POR_ALVO``) ou
+    código fora do dicionário (em branco, ignorado). As contagens ficam em
+    ``df.attrs["exclusoes_rotulo"]`` e no log (``rotulo.excluir_sem_rotulo``).
     """
-    if target_col not in df.columns:
-        return df
-    sem_rotulo = df[target_col].isna()
-    if "SITUA_ENCE" in df.columns:
-        censura = sem_rotulo & _codigo(df["SITUA_ENCE"]).isin(SITUA_CENSURA)
-    else:
-        censura = pd.Series(False, index=df.index)
-    n_censura = int(censura.sum())
-    n_sem_codigo = int(sem_rotulo.sum()) - n_censura
-
-    out = df.loc[~sem_rotulo].copy()
-    out[target_col] = out[target_col].astype(int)
-    out.attrs["exclusoes_rotulo"] = {
-        "censura": n_censura,
-        "sem_codigo": n_sem_codigo,
-        "mantidos": len(out),
-    }
-    if n_censura or n_sem_codigo:
-        logger.warning(
-            "%s: %d casos censurados (SITUA_ENCE 5 a 8) e %d sem código válido "
-            "excluídos da coorte; %d mantidos.",
-            target_col, n_censura, n_sem_codigo, len(out),
-        )
-    return out
-
-
-def _codigo(serie: pd.Series) -> pd.Series:
-    """Normaliza o código bruto do SINAN ("2 ", "2.0", 2) para "2"."""
-    return serie.astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-
-
-def _alvo_com_censura(situacao: pd.Series, positivos: set[str]) -> pd.Series:
-    """1.0 para positivos, 0.0 para os demais encerramentos e NaN para censura
-    ou código fora de SITUA_ENCE_MAPA."""
-    alvo = situacao.isin(positivos).astype(float)
-    rotulado = situacao.isin(SITUA_ENCE_MAPA.keys()) & ~situacao.isin(SITUA_CENSURA)
-    return alvo.where(rotulado)
+    return rotulo.excluir_sem_rotulo(
+        df, target_col, "SITUA_ENCE", CENSURA_POR_ALVO.get(target_col, SITUA_CENSURA), log=logger,
+    )
 
 
 def _decode_idade_sinan(serie: pd.Series) -> pd.Series:

@@ -2,7 +2,9 @@
 
 Trava os mapas de código corrigidos na revisão da Onda 0: SITUA_ENCE da
 tuberculose (com censura), CLASSI_FIN da dengue e a flag multibacilar da
-hanseníase.
+hanseníase. Na Onda 2, os mapas conferidos contra o dicionário oficial
+(PySUS 0.15.0 e microdatasus 3.0.0) e a censura dos desfechos do SINAN
+pelo helper comum de core/data/rotulo.py.
 """
 import logging
 
@@ -10,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from core.data import rotulo
 from core.data import sinan as tb_prep
 from core.data import sinan_deng as deng_prep
 from core.data import sinan_hans as hans_prep
@@ -18,6 +21,31 @@ from core.outcomes.abandono_tb import AbandonoTB
 from core.outcomes.dengue_grave import DengueGrave
 from core.outcomes.incapacidade_hanseniase import IncapacidadeHanseniase
 from core.outcomes.obito_tb import ObitoTB
+
+# ── Helper de rótulo com censura ─────────────────────────────────────────────
+
+
+def test_codigo_normaliza_espaco_float_e_zero_a_esquerda():
+    bruto = pd.Series([" 2", "2.0", 2, "02", "10", "0", "00", np.nan, None, "", "M"])
+    assert rotulo.codigo(bruto).tolist() == ["2", "2", "2", "2", "10", "0", "0", "", "", "", "M"]
+
+
+def test_alvo_com_censura_so_da_zero_ao_negativo_explicito():
+    cod = pd.Series(["1", "2", "3", "9", ""])
+    alvo = rotulo.alvo_com_censura(cod, positivos={"2"}, negativos={"1"})
+    assert alvo.iloc[:2].tolist() == [0.0, 1.0]
+    assert alvo.iloc[2:].isna().all(), "censura, ignorado e em branco não podem virar 0"
+
+
+def test_alvo_com_censura_recusa_codigo_nos_dois_lados():
+    with pytest.raises(ValueError, match="positivos e negativos"):
+        rotulo.alvo_com_censura(pd.Series(["1"]), positivos={"1"}, negativos={"1"})
+
+
+def test_exigir_rotulo_falha_com_nan():
+    with pytest.raises(ValueError, match="censura"):
+        rotulo.exigir_rotulo(pd.Series([1.0, np.nan]), "x")
+    assert rotulo.exigir_rotulo(pd.Series([1.0, 0.0]), "x").tolist() == [1, 0]
 
 # ── Tuberculose: SITUA_ENCE ──────────────────────────────────────────────────
 
