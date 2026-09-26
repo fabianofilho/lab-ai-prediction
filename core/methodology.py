@@ -71,9 +71,9 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "A detecção exige ambas as internações na amostra: use amostra grande (≥ 30.000). Amostras pequenas quebram os pares e subestimam a readmissão.",
     },
     "abandono_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados com situação de encerramento conhecida. Transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log.",
-        "target": "Encerramento por abandono (SITUA_ENCE = 2) ou abandono primário (SITUA_ENCE = 10). Cura (1), óbito por TB (3), óbito por outras causas (4) e falência (9) são negativos.",
-        "caveat": "Mapa de SITUA_ENCE conferido com o dicionário do SINAN-TB usado no PySUS e no sinan-continual-learning, mas ainda não contra um arquivo TUBEBR bruto.",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados com situação de encerramento conhecida. Óbito por TB (3), óbito por outras causas (4), transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log.",
+        "target": "Encerramento por abandono (SITUA_ENCE = 2) ou abandono primário (SITUA_ENCE = 10). Cura (1) e falência (9) são negativos.",
+        "caveat": "Mapa de SITUA_ENCE conferido com o dicionário do SINAN-TB usado no PySUS e no sinan-continual-learning, mas ainda não contra um arquivo TUBEBR bruto. Óbito é censura por risco competitivo, por decisão do lab: quem morreu antes de encerrar o tratamento não teve como abandoná-lo.",
     },
     "obito_tb": {
         "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; transferência, mudança de diagnóstico, TB-DR e mudança de esquema (SITUA_ENCE 5 a 8) são censura e saem da coorte. SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",

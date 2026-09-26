@@ -43,7 +43,7 @@ Antes de mergulharmos nos exemplos, é crucial entender os conceitos-chave:
 *   **Evento Índice**: A data de início do tratamento (`DT_INIC_TRAT`) registrada na ficha de notificação.
 *   **Janela de Observação**: O momento da notificação e início do tratamento. Features incluem idade, sexo, raça, escolaridade, forma clínica da doença, baciloscopia inicial, e informações sobre o município de residência (linkage com CNES para características da unidade de saúde).
 *   **Janela de Predição**: O período padrão do tratamento (geralmente 6 meses).
-*   **Desfecho (Outcome)**: O campo `SITUA_ENCE` na ficha de encerramento do caso foi preenchido como abandono (2) ou abandono primário (10)? Se sim, `abandono = 1`; cura (1), óbitos (3 e 4) e falência (9) dão `abandono = 0`. Transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: o caso sai da coorte em vez de virar 0.
+*   **Desfecho (Outcome)**: O campo `SITUA_ENCE` na ficha de encerramento do caso foi preenchido como abandono (2) ou abandono primário (10)? Se sim, `abandono = 1`; cura (1) e falência (9) dão `abandono = 0`. Óbito por TB (3) e por outras causas (4), risco competitivo, transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: o caso sai da coorte em vez de virar 0.
 *   **Linkage Necessário**: Intra-SINAN (para vincular a notificação inicial com a ficha de encerramento do caso) e, opcionalmente, com o SIM (para identificar óbitos como desfecho competitivo).
 
 ## 5. Exemplo 4: Predição de Risco de Hospitalização por ICSAP (e-SUS AB + SIH)

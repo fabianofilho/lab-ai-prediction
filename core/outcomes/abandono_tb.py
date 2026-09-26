@@ -17,8 +17,9 @@ class AbandonoTB(OutcomeConfig):
             description=(
                 "Prediz o risco de abandono do tratamento de tuberculose (esquema padrão de 6 meses). "
                 "Utiliza dados do SINAN (TB). O desfecho é SITUA_ENCE = 2 (abandono) ou "
-                "10 (abandono primário); transferência, mudança de diagnóstico, TB-DR e "
-                "mudança de esquema (5 a 8) são censura e saem da coorte. "
+                "10 (abandono primário), contra cura (1) e falência (9). Óbito por TB ou "
+                "por outras causas (3 e 4, risco competitivo), transferência, mudança de "
+                "diagnóstico, TB-DR e mudança de esquema (5 a 8) são censura e saem da coorte. "
                 "Features incluem forma clínica, baciloscopia, co-infecção HIV, supervisão "
                 "do tratamento (DOT), características sociodemográficas."
             ),
@@ -43,7 +44,7 @@ class AbandonoTB(OutcomeConfig):
         df = sinan_prep.preprocess(data["SINAN_TB"])
         # Only cases with closure (definitive outcome known)
         df = sinan_prep.filter_closed_cases(df)
-        # Censura (SITUA_ENCE 5 a 8) sai da coorte em vez de virar 0
+        # Censura (SITUA_ENCE 3 a 8) sai da coorte em vez de virar 0
         df = sinan_prep.drop_censored(df, self.target_col)
         return df
 

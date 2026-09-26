@@ -55,12 +55,13 @@ def test_exigir_rotulo_falha_com_nan():
 # ── Tuberculose: SITUA_ENCE ──────────────────────────────────────────────────
 
 # Código bruto -> (abandono esperado, obito_tb esperado). NaN = censura ou
-# código fora do dicionário, que sai da coorte.
+# código fora do dicionário, que sai da coorte. No abandono, o óbito é
+# censura por risco competitivo.
 TB_ESPERADO = {
     "1": (0, 0),              # cura
     "2": (1, 0),              # abandono
-    "3": (0, 1),              # óbito por TB
-    "4": (0, 1),              # óbito por outras causas
+    "3": (np.nan, 1),         # óbito por TB
+    "4": (np.nan, 1),         # óbito por outras causas
     "5": (np.nan, np.nan),    # transferência (censura)
     "6": (np.nan, np.nan),    # mudança de diagnóstico (censura)
     "7": (np.nan, np.nan),    # TB-DR (censura)
@@ -85,47 +86,53 @@ def _tb_raw(codigos):
 
 def test_tb_mapa_abandono_e_obito():
     df = tb_prep.preprocess(_tb_raw(list(TB_ESPERADO)))
-    for i, (cod, (ab, ob)) in enumerate(TB_ESPERADO.items()):
-        got_ab, got_ob = df["abandono"].iloc[i], df["obito_tb"].iloc[i]
-        if np.isnan(ab):
-            assert np.isnan(got_ab), f"SITUA_ENCE {cod!r}: abandono deveria ser censura"
-            assert np.isnan(got_ob), f"SITUA_ENCE {cod!r}: obito_tb deveria ser censura"
-        else:
-            assert got_ab == ab, f"SITUA_ENCE {cod!r}: abandono {got_ab} != {ab}"
-            assert got_ob == ob, f"SITUA_ENCE {cod!r}: obito_tb {got_ob} != {ob}"
+    for i, (cod, esperados) in enumerate(TB_ESPERADO.items()):
+        for col, esperado in zip(("abandono", "obito_tb"), esperados):
+            got = df[col].iloc[i]
+            if np.isnan(esperado):
+                assert np.isnan(got), f"SITUA_ENCE {cod!r}: {col} deveria ser censura, veio {got}"
+            else:
+                assert got == esperado, f"SITUA_ENCE {cod!r}: {col} {got} != {esperado}"
 
 
 def test_tb_codigo_bruto_com_espaco_e_float():
-    df = tb_prep.preprocess(_tb_raw([" 2", "2.0", "10 ", 3]))
-    assert df["abandono"].tolist() == [1.0, 1.0, 1.0, 0.0]
-    assert df["obito_tb"].tolist() == [0.0, 0.0, 0.0, 1.0]
+    df = tb_prep.preprocess(_tb_raw([" 2", "2.0", "10 ", 3, " 1"]))
+    assert df["abandono"].iloc[[0, 1, 2, 4]].tolist() == [1.0, 1.0, 1.0, 0.0]
+    assert np.isnan(df["abandono"].iloc[3]), "óbito por TB é censura no abandono"
+    assert df["obito_tb"].tolist() == [0.0, 0.0, 0.0, 1.0, 0.0]
 
 
 def test_tb_positivos_e_censura_sao_os_do_dicionario():
     assert tb_prep.SITUA_ABANDONO == {"2", "10"}
     assert tb_prep.SITUA_OBITO == {"3", "4"}
     assert tb_prep.SITUA_CENSURA == {"5", "6", "7", "8"}
+    assert tb_prep.CENSURA_POR_ALVO["abandono"] == {"3", "4", "5", "6", "7", "8"}
+    assert tb_prep.CENSURA_POR_ALVO["obito_tb"] == {"5", "6", "7", "8"}
+    assert tb_prep.SITUA_NEGATIVO_ABANDONO == {"1", "9"}
     # obito por TB (3) nunca pode voltar a ser abandono, nem abandono (2) obito
     assert "3" not in tb_prep.SITUA_ABANDONO
     assert "2" not in tb_prep.SITUA_OBITO
 
 
-@pytest.mark.parametrize("outcome_cls, positivos", [
-    (AbandonoTB, {"2", "10"}),
-    (ObitoTB, {"3", "4"}),
+@pytest.mark.parametrize("outcome_cls, positivos, n_censura", [
+    (AbandonoTB, {"2", "10"}, 6),   # 3 a 8
+    (ObitoTB, {"3", "4"}, 4),       # 5 a 8
 ])
-def test_tb_coorte_exclui_censura_e_conta(outcome_cls, positivos, caplog):
+def test_tb_coorte_exclui_censura_e_conta(outcome_cls, positivos, n_censura, caplog):
     oc = outcome_cls()
     raw = _tb_raw(list(TB_ESPERADO))
     with caplog.at_level(logging.WARNING, logger="core.data.sinan"):
         cohort = oc.build_cohort({"SINAN_TB": raw})
 
-    # 4 censurados (5 a 8) e 1 sem código saem; os 6 encerramentos rotulados ficam
-    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 4, "sem_codigo": 1, "mantidos": 6}
-    assert "4 casos censurados" in caplog.text
+    # censurados e 1 sem código saem; os encerramentos rotulados ficam
+    mantidos = len(TB_ESPERADO) - n_censura - 1
+    assert cohort.attrs["exclusoes_rotulo"] == {
+        "censura": n_censura, "sem_codigo": 1, "mantidos": mantidos,
+    }
+    assert f"{n_censura} casos censurados" in caplog.text
 
     y = oc.get_target(oc.build_features(cohort))
-    assert len(y) == 6
+    assert len(y) == mantidos
     assert y.notna().all()
     assert set(y.unique()) == {0, 1}
     esperado_pos = sum(1 for c in TB_ESPERADO if c in positivos)

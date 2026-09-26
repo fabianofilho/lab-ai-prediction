@@ -68,12 +68,17 @@ SITUA_FALENCIA = {"9"}
 # saem da coorte do desfecho e nunca viram 0.
 SITUA_CENSURA = {"5", "6", "7", "8"}
 
+# No abandono, o óbito (3 e 4) também é censura: risco competitivo, por
+# decisão do lab. Quem morreu antes de encerrar o tratamento não teve como
+# abandoná-lo, e contá-lo como 0 ensinaria ao modelo que ele não abandonaria.
+SITUA_CENSURA_ABANDONO = SITUA_CENSURA | SITUA_OBITO
+
 # Negativos de cada alvo. O que não é positivo, negativo nem censura (em
 # branco, código fora do dicionário) também fica sem rótulo.
-SITUA_NEGATIVO_ABANDONO = SITUA_CURA | SITUA_OBITO | SITUA_FALENCIA
+SITUA_NEGATIVO_ABANDONO = SITUA_CURA | SITUA_FALENCIA
 SITUA_NEGATIVO_OBITO = SITUA_CURA | SITUA_ABANDONO | SITUA_FALENCIA
 CENSURA_POR_ALVO = {
-    "abandono": SITUA_CENSURA,
+    "abandono": SITUA_CENSURA_ABANDONO,
     "obito_tb": SITUA_CENSURA,
 }
 
