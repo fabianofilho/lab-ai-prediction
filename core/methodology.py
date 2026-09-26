@@ -113,8 +113,9 @@ METHODOLOGY: dict[str, dict] = {
         "target": "Lesão autoprovocada (LES_AUTOP = 1), com consequência suicida / violência autoprovocada como fallback de anos antigos.",
     },
     "intoxicacao_grave": {
-        "pull": "Base SINAN-Intoxicação Exógena (nacional, filtrada por UF). Coorte = casos confirmados com evolução conhecida; EVOLUCAO sai das preditoras.",
-        "target": "Desfecho adverso: óbito ou incapacidade permanente na evolução do caso.",
+        "pull": "Base SINAN-Intoxicação Exógena (nacional, filtrada por UF). Coorte = intoxicações confirmadas (CLASSI_FIN = 1) com evolução conhecida; EVOLUCAO sai das preditoras. Óbito por outra causa (EVOLUCAO = 4) e perda de seguimento (5) são censura; ignorado (9) e em branco ficam sem rótulo. Os dois grupos saem da coorte em vez de virar negativo, e a contagem vai para o log.",
+        "target": "Desfecho adverso: óbito por intoxicação exógena (EVOLUCAO = 3) ou cura com sequela (EVOLUCAO = 2), contra cura sem sequela (EVOLUCAO = 1).",
+        "caveat": "Mapa de EVOLUCAO conferido com o dicionário do SINAN-Intoxicação Exógena (PySUS 0.15.0), mas ainda não contra um arquivo IEXOBR bruto. Óbito por outra causa é censura por risco competitivo, por decisão do lab.",
     },
 }
 

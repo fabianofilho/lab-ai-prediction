@@ -16,10 +16,12 @@ from core.data import rotulo
 from core.data import sinan as tb_prep
 from core.data import sinan_deng as deng_prep
 from core.data import sinan_hans as hans_prep
+from core.data import sinan_iexo as iexo_prep
 from core.outcomes.abandono_hanseniase import AbandonoHanseniase
 from core.outcomes.abandono_tb import AbandonoTB
 from core.outcomes.dengue_grave import DengueGrave
 from core.outcomes.incapacidade_hanseniase import IncapacidadeHanseniase
+from core.outcomes.intoxicacao_grave import IntoxicacaoGrave
 from core.outcomes.obito_tb import ObitoTB
 
 # ── Helper de rótulo com censura ─────────────────────────────────────────────
@@ -323,5 +325,63 @@ def test_hanseniase_incapacidade_coorte_exclui_nao_avaliado(caplog):
 
 def test_hanseniase_incapacidade_get_target_nao_preenche_com_zero():
     oc = IncapacidadeHanseniase()
+    with pytest.raises(ValueError, match="censura"):
+        oc.get_target(pd.DataFrame({oc.target_col: [1.0, np.nan]}))
+
+
+# ── Intoxicação exógena: EVOLUCAO ────────────────────────────────────────────
+
+# Dicionário do SINAN-Intoxicação Exógena (PySUS 0.15.0, IEXO.csv, campo 68).
+# Código -> desfecho_adverso esperado. NaN = censura ou sem código.
+IEXO_EVOLUCAO_ESPERADO = {
+    "1": 0,          # cura sem sequela
+    "2": 1,          # cura com sequela
+    "3": 1,          # óbito por intoxicação exógena
+    "4": np.nan,     # óbito por outra causa (risco competitivo; o app contava como grave)
+    "5": np.nan,     # perda de seguimento (o app contava como grave)
+    "9": np.nan,     # ignorado
+    "": np.nan,      # em branco
+}
+
+
+def _iexo_raw(evolucao, circunstan=None):
+    n = len(evolucao)
+    return pd.DataFrame({
+        "CLASSI_FIN": ["1"] * n,
+        "EVOLUCAO": evolucao,
+        "CIRCUNSTAN": circunstan if circunstan is not None else ["02"] * n,
+        "NU_IDADE_N": [4025] * n,
+        "CS_SEXO": ["F"] * n,
+        "AGENTE_TOX": ["01"] * n,
+    })
+
+
+def test_intoxicacao_mapa_evolucao():
+    df = iexo_prep.preprocess(_iexo_raw(list(IEXO_EVOLUCAO_ESPERADO)))
+    for i, (cod, esperado) in enumerate(IEXO_EVOLUCAO_ESPERADO.items()):
+        got = df["desfecho_adverso"].iloc[i]
+        if np.isnan(esperado):
+            assert np.isnan(got), f"EVOLUCAO {cod!r}: desfecho_adverso deveria ficar sem rótulo, veio {got}"
+        else:
+            assert got == esperado, f"EVOLUCAO {cod!r}: desfecho_adverso {got} != {esperado}"
+    assert df["obito"].tolist() == [0, 0, 1, 0, 0, 0, 0], "obito é só o óbito por intoxicação (3)"
+
+
+def test_intoxicacao_coorte_exclui_censura_e_conta(caplog):
+    oc = IntoxicacaoGrave()
+    raw = _iexo_raw(list(IEXO_EVOLUCAO_ESPERADO))
+    raw.loc[len(raw)] = raw.iloc[0].to_dict() | {"CLASSI_FIN": "2", "EVOLUCAO": "3"}  # só exposição
+    with caplog.at_level(logging.WARNING):
+        cohort = oc.build_cohort({"SINAN_IEXO": raw})
+    # 4 e 5 censurados, 9 e em branco sem código; a exposição sai no filtro
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 2, "sem_codigo": 2, "mantidos": 3}
+    assert "2 casos censurados (EVOLUCAO 4, 5)" in caplog.text
+    assert "EVOLUCAO" not in cohort.columns
+    y = oc.get_target(oc.build_features(cohort))
+    assert y.tolist() == [0, 1, 1]
+
+
+def test_intoxicacao_get_target_nao_preenche_censura_com_zero():
+    oc = IntoxicacaoGrave()
     with pytest.raises(ValueError, match="censura"):
         oc.get_target(pd.DataFrame({oc.target_col: [1.0, np.nan]}))

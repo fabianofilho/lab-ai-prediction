@@ -2,6 +2,7 @@
 from __future__ import annotations
 import pandas as pd
 from core.outcomes.base import OutcomeConfig
+from core.data import rotulo
 from core.data import sinan_iexo as iexo_prep
 from core.features import engineering as eng
 
@@ -13,7 +14,10 @@ class IntoxicacaoGrave(OutcomeConfig):
             name="Desfecho Adverso em Intoxicação Exógena",
             description=(
                 "Prediz a probabilidade de um caso de intoxicação exógena resultar em "
-                "desfecho adverso: óbito (EVOLUCAO=2 ou 3) ou incapacidade permanente (EVOLUCAO=5). "
+                "desfecho adverso: óbito por intoxicação (EVOLUCAO = 3) ou cura com "
+                "sequela (EVOLUCAO = 2), contra cura sem sequela (EVOLUCAO = 1). Óbito "
+                "por outra causa (4) e perda de seguimento (5) são censura; ignorado (9) "
+                "e em branco também saem da coorte. "
                 "Features incluem agente tóxico, circunstância (acidental vs. tentativa de suicídio), "
                 "via de exposição, hospitalização e características demográficas. "
                 "Utiliza SINAN-Intoxicação Exógena."
@@ -37,13 +41,10 @@ class IntoxicacaoGrave(OutcomeConfig):
     def build_cohort(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = iexo_prep.preprocess(data["SINAN_IEXO"])
         df = iexo_prep.filter_confirmed(df)
-        # Manter apenas casos com desfecho conhecido
-        if "EVOLUCAO" in data["SINAN_IEXO"].columns:
-            known = data["SINAN_IEXO"]["EVOLUCAO"].astype(str).str.strip().isin(
-                ["1", "2", "3", "4", "5"]
-            )
-            df = df[known.values[:len(df)]].copy() if len(known) == len(df) else df
-        df = df.drop(columns=["obito", "incapacidade", "EVOLUCAO", "DT_OBITO"], errors="ignore")
+        # Só casos com desfecho conhecido: censura (4, 5), ignorado e em branco
+        # saem com contagem, em vez de virar 0
+        df = iexo_prep.drop_censored(df, self.target_col)
+        df = df.drop(columns=["obito", "sequela", "EVOLUCAO", "DT_OBITO"], errors="ignore")
         return df
 
     def build_features(self, cohort: pd.DataFrame) -> pd.DataFrame:
@@ -59,4 +60,5 @@ class IntoxicacaoGrave(OutcomeConfig):
         return df
 
     def get_target(self, cohort: pd.DataFrame) -> pd.Series:
-        return cohort[self.target_col].fillna(0).astype(int)
+        # Sem fillna(0): censura não é negativo. build_cohort já exclui esses casos.
+        return rotulo.exigir_rotulo(cohort[self.target_col], self.key)
