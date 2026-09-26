@@ -100,8 +100,9 @@ METHODOLOGY: dict[str, dict] = {
         "target": "Necessidade de hospitalização (HOSPITALIZ = 1).",
     },
     "obito_aids": {
-        "pull": "Base SINAN-AIDS adulto (nacional, filtrada por UF). Doenças definidoras de AIDS entram como features; EVOLUCAO sai.",
-        "target": "Evolução para óbito por AIDS (EVOLUCAO = 2).",
+        "pull": "Base SINAN-AIDS adulto (nacional, filtrada por UF). Coorte = casos com evolução conhecida. Óbito por outras causas (EVOLUCAO = 3) é censura: sai da coorte em vez de virar negativo, e a contagem vai para o log. Doenças definidoras de AIDS entram como features; EVOLUCAO sai.",
+        "target": "Evolução para óbito por AIDS (EVOLUCAO = 2), contra vivo (EVOLUCAO = 1).",
+        "caveat": "O mapa de EVOLUCAO do SINAN-AIDS ainda não foi conferido com o dicionário oficial nem com um arquivo AIDABR bruto. Óbito por outras causas é censura por risco competitivo, por decisão do lab.",
     },
     "sifilis_nao_cura": {
         "pull": "Base SINAN-Sífilis Adquirida (nacional, filtrada por UF). Coorte = casos confirmados com evolução conhecida.",

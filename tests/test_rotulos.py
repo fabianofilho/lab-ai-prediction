@@ -14,6 +14,7 @@ import pytest
 
 from core.data import rotulo
 from core.data import sinan as tb_prep
+from core.data import sinan_aids as aids_prep
 from core.data import sinan_chik as chik_prep
 from core.data import sinan_deng as deng_prep
 from core.data import sinan_hans as hans_prep
@@ -23,6 +24,7 @@ from core.outcomes.abandono_tb import AbandonoTB
 from core.outcomes.dengue_grave import DengueGrave
 from core.outcomes.incapacidade_hanseniase import IncapacidadeHanseniase
 from core.outcomes.intoxicacao_grave import IntoxicacaoGrave
+from core.outcomes.obito_aids import ObitoAIDS
 from core.outcomes.obito_tb import ObitoTB
 
 # ── Helper de rótulo com censura ─────────────────────────────────────────────
@@ -431,3 +433,53 @@ def test_chikungunya_obito_pelo_agravo_e_evolucao_2():
     })
     df = chik_prep.preprocess(raw)
     assert df["obito"].tolist() == list(CHIK_EVOLUCAO_ESPERADO.values())
+
+
+# ── AIDS adulto: EVOLUCAO ────────────────────────────────────────────────────
+
+# Mapa do app (1 vivo, 2 óbito por aids, 3 óbito por outras causas, 9
+# ignorado), ainda sem dicionário oficial conferido. Código -> obito_aids.
+AIDS_EVOLUCAO_ESPERADO = {
+    "1": 0,          # vivo
+    "2": 1,          # óbito por aids
+    "3": np.nan,     # óbito por outras causas (risco competitivo; o app dava 0)
+    "9": np.nan,     # ignorado
+    "": np.nan,      # em branco
+}
+
+
+def _aids_raw(codigos):
+    n = len(codigos)
+    return pd.DataFrame({
+        "EVOLUCAO": codigos,
+        "NU_IDADE_N": [4035] * n,
+        "CS_SEXO": ["M"] * n,
+        "ANT_TUBERC": ["1"] * n,
+    })
+
+
+def test_aids_obito_por_outras_causas_e_censura():
+    df = aids_prep.preprocess(_aids_raw(list(AIDS_EVOLUCAO_ESPERADO)))
+    for i, (cod, esperado) in enumerate(AIDS_EVOLUCAO_ESPERADO.items()):
+        got = df["obito_aids"].iloc[i]
+        if np.isnan(esperado):
+            assert np.isnan(got), f"EVOLUCAO {cod!r}: obito_aids deveria ficar sem rótulo, veio {got}"
+        else:
+            assert got == esperado, f"EVOLUCAO {cod!r}: obito_aids {got} != {esperado}"
+
+
+def test_aids_coorte_exclui_censura_e_conta(caplog):
+    oc = ObitoAIDS()
+    with caplog.at_level(logging.WARNING):
+        cohort = oc.build_cohort({"SINAN_AIDS": _aids_raw(list(AIDS_EVOLUCAO_ESPERADO) + ["2.0"])})
+    # 9 e em branco saem no filtro de evolução conhecida; 3 sai como censura
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 1, "sem_codigo": 0, "mantidos": 3}
+    assert "1 casos censurados (EVOLUCAO 3)" in caplog.text
+    y = oc.get_target(oc.build_features(cohort))
+    assert y.tolist() == [0, 1, 1]
+
+
+def test_aids_get_target_nao_preenche_censura_com_zero():
+    oc = ObitoAIDS()
+    with pytest.raises(ValueError, match="censura"):
+        oc.get_target(pd.DataFrame({oc.target_col: [1.0, np.nan]}))
