@@ -88,7 +88,7 @@ METHODOLOGY: dict[str, dict] = {
     "incapacidade_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). AVALIA_N/grau_incapacidade (fonte do alvo) e colunas pós-tratamento (TPALTA_N, doses) saem das preditoras.",
         "target": "Incapacidade física grau 2 (G2D) ao diagnóstico (AVALIA_N = 2), indicador de detecção tardia monitorado pela OMS, contra grau zero e grau I (AVALIA_N = 0 ou 1). Não avaliado (AVALIA_N = 3) e em branco saem da coorte em vez de virar negativo. Features: forma clínica, classificação operacional, modo de detecção, baciloscopia, tempo notificação-diagnóstico e demografia.",
-        "caveat": "Desfecho moderadamente desbalanceado; AUC modesta (~0,65) por ser predição de detecção tardia a partir de características de base.",
+        "caveat": "Desfecho moderadamente desbalanceado. Espere AUC modesta, por ser predição de detecção tardia a partir de características de base. A AUC vista antes deste rótulo foi medida numa coorte em que não avaliado e em branco contavam como grau zero, e não vale para a coorte atual: refazer.",
     },
     "dengue_grave": {
         "pull": "Base SINAN-Dengue (nacional, filtrada por UF; arquivo grande, 1º download mais lento). CLASSI_FIN, sinais de alarme (ALRM_*), sinais de gravidade (GRAV_*) e hospitalização saem das preditoras: definem ou decorrem da classificação final.",
