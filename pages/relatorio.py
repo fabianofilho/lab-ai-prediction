@@ -1,5 +1,6 @@
 """Lab AI Prediction — Relatório exportável (passo 10)."""
 from __future__ import annotations
+import warnings as _warnings_rep
 from pathlib import Path
 from PIL import Image as _PILImage
 
@@ -17,6 +18,19 @@ def _pd():
 def _ev():
     from core.models import evaluation
     return evaluation
+
+
+@st.cache_resource(show_spinner=False)
+def _metrics():
+    from core.models import metrics
+    return metrics
+
+
+@st.cache_data(show_spinner=False)
+def _clinical_summary(y_eval, probs, n_boot: int, seed: int) -> dict:
+    """IC por bootstrap das métricas de discriminação e calibração (cacheado)."""
+    from core.models.metrics import performance_summary
+    return performance_summary(y_eval, probs, n_boot=n_boot, seed=seed)
 
 
 _favicon = _PILImage.open(Path(__file__).parent.parent / "favicon.png")
@@ -308,7 +322,104 @@ def step_title(n: int, title: str, caption: str = "") -> None:
     )
 
 
-def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict) -> str:
+_DCA_REPORT_THRESHOLDS = (0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50)
+
+
+def _fmt4(v: float) -> str:
+    import math
+    return "indefinido" if math.isnan(v) else f"{v:.4f}"
+
+
+def _calib_metrics_rows(calib: dict) -> list[tuple[str, float, float]]:
+    """O:E, CITL, slope, ECE e Brier antes e depois da calibração, no eval dela."""
+    import warnings
+
+    from core.models import metrics as mt
+    y_c = calib["y_eval"]
+    rows = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", mt.MetricWarning)
+        for label, fn in (
+            ("Razão O:E", mt.observed_expected_ratio),
+            ("Calibration-in-the-large", mt.calibration_in_the_large),
+            ("Calibration slope", mt.calibration_slope),
+            ("ECE (10 bins)", mt.expected_calibration_error),
+            ("Brier", mt.brier_score),
+        ):
+            rows.append((label, fn(y_c, calib["raw_probs"]), fn(y_c, calib["cal_probs"])))
+    return rows
+
+
+def _html_clinical_sections(clin: dict | None, epv: dict | None,
+                            dca, dca_ranges: dict | None) -> str:
+    """Seções de incerteza, calibração, EPV e decision curve do relatório HTML."""
+    import html
+    import math
+
+    from core.models import metrics as mt
+
+    def _f(v: float, fmt: str = ".4f") -> str:
+        return format(v, fmt) if isinstance(v, float) and math.isfinite(v) else "indefinido"
+
+    out = ""
+    if clin:
+        rows = "".join(
+            f"<tr><td>{mt.METRIC_LABELS[k]}</td><td>{_f(r['value'])}</td>"
+            f"<td>{_f(r['ci_low'])} a {_f(r['ci_high'])}</td>"
+            f"<td>{html.escape(mt.METRIC_REFERENCE[k])}</td></tr>"
+            for k, r in clin["metrics"].items()
+        )
+        avisos = "".join(f"<li>{html.escape(w)}</li>" for w in clin.get("warnings", []))
+        out += f"""
+        <h2>5. Incerteza e calibração</h2>
+        <table>
+          <thead><tr><th>Métrica</th><th>Valor</th><th>IC 95%</th><th>Ideal</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+        <p class="note">IC por bootstrap percentil estratificado pelo desfecho
+        ({clin['n_boot']} réplicas, semente {clin['seed']}) sobre {clin['n']:,} registros
+        de avaliação, com {clin['n_events']:,} eventos. CITL: intercepto da regressão
+        logística com logit(p) como offset. Slope: coeficiente de logit(p) na
+        recalibração logística. O:E: eventos observados sobre a soma das
+        probabilidades. ECE com {clin['n_bins']} bins de largura fixa.</p>
+        {f'<ul class="warn">{avisos}</ul>' if avisos else ''}"""
+    if epv:
+        msg = mt.epv_message(epv)
+        txt = (html.escape(msg) if msg else
+               f"EPV {epv['epv']:.1f}: {epv['n_events']:,} eventos da classe menos "
+               f"frequente para {epv['n_predictors']:,} variáveis na entrada do modelo.")
+        out += f'<p class="{"warn" if msg else "note"}">{txt}</p>'
+    if dca is not None and dca_ranges:
+        sel = dca[dca["threshold"].round(2).isin(_DCA_REPORT_THRESHOLDS)]
+        rows = "".join(
+            f"<tr><td>{r.threshold:.0%}</td><td>{_f(r.net_benefit_model)}</td>"
+            f"<td>{_f(r.net_benefit_all)}</td><td>0</td><td>{_f(r.gain)}</td></tr>"
+            for r in sel.itertuples()
+        )
+        out += f"""
+        <h2>6. Decision curve</h2>
+        <table>
+          <tr><th>Margem mínima de ganho</th><td>{dca_ranges['margin']:.3f}</td></tr>
+          <tr><th>Faixa com ganho de pelo menos a margem</th>
+              <td>{mt.format_ranges(dca_ranges['relevant_gain'])}</td></tr>
+          <tr><th>Faixa com qualquer ganho (critério ingênuo)</th>
+              <td>{mt.format_ranges(dca_ranges['any_gain'])}</td></tr>
+          <tr><th>Maior ganho</th><td>{_f(dca_ranges['max_gain'])} no limiar
+              {_f(dca_ranges['threshold_max_gain'], '.0%')}</td></tr>
+        </table>
+        <table>
+          <thead><tr><th>Limiar</th><th>Modelo</th><th>Tratar todos</th>
+          <th>Ninguém</th><th>Ganho sobre a melhor trivial</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+        <p class="note">Benefício líquido = VP/n - FP/n x t/(1 - t), tratando quem tem
+        p &ge; t. O ganho é contra a melhor entre tratar todos e não tratar ninguém.</p>"""
+    return out
+
+
+def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict,
+                       clin: dict | None = None, epv: dict | None = None,
+                       dca=None, dca_ranges: dict | None = None) -> str:
     import datetime
     algo = results.get("algo_label", "—")
     from core.features.data_dict import get_info as _gi_html
@@ -331,7 +442,7 @@ def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict) 
             for i, (name, val) in enumerate(top_fi)
         )
         feat_imp_section = f"""
-        <h2>5. Importância de Features (Top 15)</h2>
+        <h2>7. Importância de Features (Top 15)</h2>
         <table>
           <thead><tr><th>#</th><th>Feature</th><th>Importância</th></tr></thead>
           <tbody>{fi_rows}</tbody>
@@ -339,13 +450,21 @@ def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict) 
 
     calib_section = ""
     if calib and not calib.get("skipped"):
+        calib_rows = "".join(
+            f"<tr><td>{lbl}</td><td>{_fmt4(a)}</td><td>{_fmt4(b)}</td></tr>"
+            for lbl, a, b in _calib_metrics_rows(calib)
+        ) if calib.get("y_eval") is not None else ""
         calib_section = f"""
-        <h2>6. Calibração</h2>
+        <h2>8. Calibração</h2>
         <table>
           <tr><th>Método</th><td>{calib.get('method','—').capitalize()}</td></tr>
           <tr><th>Brier antes</th><td>{calib.get('brier_before',0):.4f}</td></tr>
           <tr><th>Brier depois</th><td>{calib.get('brier_after',0):.4f}</td></tr>
           <tr><th>Variação</th><td>{calib.get('brier_delta',0):+.4f}</td></tr>
+        </table>
+        <table>
+          <thead><tr><th>Métrica (avaliação da calibração)</th><th>Antes</th><th>Depois</th></tr></thead>
+          <tbody>{calib_rows}</tbody>
         </table>"""
 
     benchmark_section = ""
@@ -357,7 +476,7 @@ def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict) 
             for r in comp
         )
         benchmark_section = f"""
-        <h2>7. Benchmark entre Estados</h2>
+        <h2>9. Benchmark entre Estados</h2>
         <table>
           <thead><tr><th>Coorte</th><th>N</th><th>ROC-AUC</th><th>PR-AUC</th><th>F1</th><th>Brier</th></tr></thead>
           <tbody>{rows}</tbody>
@@ -382,6 +501,8 @@ def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict) 
   .val{{font-size:1.3rem;font-weight:700}}
   code{{background:#f3f4f6;padding:2px 5px;border-radius:3px;font-size:.82rem}}
   ul{{columns:3;padding-left:20px}}
+  .note{{font-size:.8rem;color:#4b5563}}
+  .warn{{font-size:.8rem;color:#92400e}}
   .footer{{margin-top:48px;font-size:.72rem;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:16px}}
 </style>
 </head>
@@ -418,6 +539,7 @@ def _build_html_report(outcome, results, m, calib, comp, fc, mc, ss_data: dict) 
   <div class="card"><div class="lbl">F1-Score</div><div class="val">{m['f1']:.4f}</div></div>
 </div>
 
+{_html_clinical_sections(clin, epv, dca, dca_ranges)}
 {feat_imp_section}
 {calib_section}
 {benchmark_section}
@@ -552,8 +674,43 @@ if _has_oof:
     _y_np   = _np_rep.array(_y_eval[:_min_len])
     _oof_np = _np_rep.array(_oof[:_min_len])
 
-# ── 5. Curvas de desempenho ────────────────────────────────────────────────────
-st.markdown("### 5. Curvas de Desempenho")
+# ── 5. Incerteza e calibração [ML-06] ─────────────────────────────────────────
+_mt_rep = _metrics()
+
+st.markdown("### 5. Incerteza e Calibração")
+_clin_rep = results.get("clinical_summary")
+if _clin_rep is None and _has_oof:
+    _n_boot_rep = 1000 if len(_y_np) <= 50_000 else 500
+    with st.spinner(f"Calculando IC por bootstrap ({_n_boot_rep} réplicas)…"):
+        _clin_rep = _clinical_summary(_y_np.astype(int), _oof_np.astype(float),
+                                      _n_boot_rep, int(ss.get("sample_seed", 42)))
+if _clin_rep is not None:
+    st.dataframe(_mt_rep.summary_table(_clin_rep), use_container_width=True, hide_index=True)
+    st.caption(
+        f"IC 95% por bootstrap percentil estratificado pelo desfecho ({_clin_rep['n_boot']} "
+        f"réplicas, semente {_clin_rep['seed']}) sobre {_clin_rep['n']:,} registros de "
+        f"avaliação, com {_clin_rep['n_events']:,} eventos. CITL: intercepto com logit(p) "
+        f"como offset. Slope: coeficiente de logit(p) na recalibração logística. "
+        f"ECE com {_clin_rep['n_bins']} bins."
+    )
+    for _w_rep in _clin_rep["warnings"]:
+        st.warning(_w_rep)
+else:
+    st.info("Retreine o modelo para calcular os intervalos de confiança.")
+_epv_rep = results.get("epv")
+if _epv_rep:
+    _epv_msg_rep = _mt_rep.epv_message(_epv_rep)
+    if _epv_msg_rep:
+        st.warning(_epv_msg_rep)
+    else:
+        st.caption(
+            f"EPV {_epv_rep['epv']:.1f}: {_epv_rep['n_events']:,} eventos da classe menos "
+            f"frequente para {_epv_rep['n_predictors']:,} variáveis na entrada do modelo."
+        )
+st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+
+# ── 6. Curvas de desempenho ────────────────────────────────────────────────────
+st.markdown("### 6. Curvas de Desempenho")
 if _has_oof:
     _col_roc, _col_pr = st.columns(2)
     with _col_roc:
@@ -564,8 +721,8 @@ else:
     st.info("Retreine o modelo para gerar as curvas de desempenho.")
 st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
 
-# ── 6. Distribuição dos Scores Preditos ───────────────────────────────────────
-st.markdown("### 6. Distribuição dos Scores Preditos")
+# ── 7. Distribuição dos Scores Preditos ───────────────────────────────────────
+st.markdown("### 7. Distribuição dos Scores Preditos")
 if _has_oof:
     _fig_dist = _go_rep.Figure()
     _fig_dist.add_trace(_go_rep.Histogram(
@@ -587,8 +744,8 @@ else:
     st.info("Retreine o modelo para gerar a distribuição dos scores preditos.")
 st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
 
-# ── 7. Explicabilidade SHAP ────────────────────────────────────────────────────
-st.markdown("### 7. Explicabilidade SHAP")
+# ── 8. Explicabilidade SHAP ────────────────────────────────────────────────────
+st.markdown("### 8. Explicabilidade SHAP")
 _X_rep = ss.get("X_res")
 _model_rep = results.get("model")
 if _X_rep is not None and _model_rep is not None:
@@ -618,8 +775,8 @@ else:
         st.info("Retreine o modelo para visualizar a explicabilidade SHAP.")
 st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
 
-# ── 8. Métricas Clínicas por Ponto de Corte ───────────────────────────────────
-st.markdown("### 8. Métricas Clínicas por Ponto de Corte")
+# ── 9. Métricas Clínicas por Ponto de Corte ───────────────────────────────────
+st.markdown("### 9. Métricas Clínicas por Ponto de Corte")
 if _has_oof:
     st.caption("Sensibilidade, especificidade, F1 e precisão em função do threshold de decisão.")
     st.plotly_chart(ev.threshold_curve_chart(_y_np, _oof_np), use_container_width=True)
@@ -627,8 +784,30 @@ else:
     st.info("Retreine o modelo para gerar as métricas clínicas por threshold.")
 st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
 
-# ── 9. Matriz de Confusão ─────────────────────────────────────────────────────
-st.markdown("### 9. Matriz de Confusão")
+# ── 10. Decision Curve ────────────────────────────────────────────────────────
+st.markdown("### 10. Decision Curve")
+_dca_rep = _dca_rg_rep = None
+if _has_oof:
+    _dca_margin_rep = float(ss.get("dca_margin", 0.01))
+    with _warnings_rep.catch_warnings():
+        _warnings_rep.simplefilter("ignore", _mt_rep.MetricWarning)
+        _dca_rep = _mt_rep.decision_curve(_y_np.astype(int), _oof_np.astype(float))
+    _dca_rg_rep = _mt_rep.net_benefit_ranges(_dca_rep, margin=_dca_margin_rep)
+    st.plotly_chart(ev.decision_curve_chart(_dca_rep, _dca_rg_rep), use_container_width=True)
+    st.markdown(
+        f"- **Faixa com ganho de pelo menos {_dca_margin_rep:.3f}:** "
+        f"{_mt_rep.format_ranges(_dca_rg_rep['relevant_gain'])}\n"
+        f"- **Faixa com qualquer ganho (critério ingênuo):** "
+        f"{_mt_rep.format_ranges(_dca_rg_rep['any_gain'])}"
+    )
+    st.caption("Margem definida na seção Decision Curve da etapa de resultados. "
+               "O ganho é contra a melhor entre tratar todos e não tratar ninguém.")
+else:
+    st.info("Retreine o modelo para gerar a decision curve.")
+st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+
+# ── 11. Matriz de Confusão ─────────────────────────────────────────────────────
+st.markdown("### 11. Matriz de Confusão")
 if _has_oof:
     st.caption("Threshold padrão 0,50. Ajuste o ponto de corte em Métricas Clínicas acima.")
     _tm50     = ev.threshold_metrics(_y_np, _oof_np, 0.5)
@@ -665,9 +844,9 @@ else:
     st.info("Retreine o modelo para gerar a matriz de confusão.")
 st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
 
-# ── 10. Calibração ─────────────────────────────────────────────────────────────
+# ── 12. Calibração ─────────────────────────────────────────────────────────────
 if calib and not calib.get("skipped"):
-    st.markdown("### 10. Calibração")
+    st.markdown("### 12. Calibração")
     _cal1, _cal2 = st.columns(2)
     with _cal1:
         st.plotly_chart(
@@ -682,11 +861,19 @@ if calib and not calib.get("skipped"):
         st.metric("Brier depois", f"{calib['brier_after']:.4f}",
                   delta=f"{-calib['brier_delta']:+.4f}", delta_color="inverse")
         st.markdown(f"**Método:** {calib['method'].capitalize()}")
+    if calib.get("y_eval") is not None:
+        st.dataframe(
+            _pd().DataFrame(_calib_metrics_rows(calib),
+                            columns=["Métrica", "Antes", "Depois"]).round(4),
+            use_container_width=True, hide_index=True,
+        )
+        st.caption("Medidas no conjunto de avaliação da calibração, que nem o modelo "
+                   "nem o calibrador viram.")
     st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
 
-# ── 11. Benchmark ──────────────────────────────────────────────────────────────
+# ── 13. Benchmark ──────────────────────────────────────────────────────────────
 if comp:
-    st.markdown("### 11. Benchmark entre Estados")
+    st.markdown("### 13. Benchmark entre Estados")
     st.dataframe(ev.metrics_comparison_table(comp), use_container_width=True, hide_index=True)
     _sdicts = [r["shap_dict"] for r in comp if r.get("shap_dict")]
     _slabels = [r["label"] for r in comp if r.get("shap_dict")]
@@ -700,7 +887,9 @@ st.caption(
     "Gera um relatório HTML autocontido com todas as seções acima — "
     "adequado para compartilhar com gestores e equipes clínicas."
 )
-_html_report = _build_html_report(outcome, results, m, calib, comp, fc, mc, dict(ss))
+_html_report = _build_html_report(outcome, results, m, calib, comp, fc, mc, dict(ss),
+                                  clin=_clin_rep, epv=_epv_rep,
+                                  dca=_dca_rep, dca_ranges=_dca_rg_rep)
 st.download_button(
     label="Baixar relatório.html",
     data=_html_report,
