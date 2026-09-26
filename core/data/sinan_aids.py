@@ -76,17 +76,14 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def filter_with_outcome(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only cases with a known outcome (EVOLUCAO 1, 2 or 3)."""
-    if "EVOLUCAO" in df.columns:
-        known = rotulo.codigo(df["EVOLUCAO"]).isin(EVOLUCAO_VIVO | EVOLUCAO_OBITO_AIDS | EVOLUCAO_CENSURA)
-        return df[known].copy()
-    return df
-
-
 def drop_censored(df: pd.DataFrame, target_col: str = "obito_aids") -> pd.DataFrame:
-    """Tira da coorte o óbito por outras causas (EVOLUCAO 3) e o que não tem
-    código válido, com a contagem em ``df.attrs``."""
+    """Tira da coorte o óbito por outras causas (EVOLUCAO 3, censura) e o que
+    não tem código válido (ignorado, em branco, fora do dicionário), com as
+    duas contagens em ``df.attrs["exclusoes_rotulo"]`` e no log.
+
+    Não filtre a evolução conhecida antes: o filtro tiraria o 9 e o em
+    branco sem contá-los.
+    """
     return rotulo.excluir_sem_rotulo(df, target_col, "EVOLUCAO", EVOLUCAO_CENSURA)
 
 

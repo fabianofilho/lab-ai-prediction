@@ -480,9 +480,10 @@ def test_aids_coorte_exclui_censura_e_conta(caplog):
     oc = ObitoAIDS()
     with caplog.at_level(logging.WARNING):
         cohort = oc.build_cohort({"SINAN_AIDS": _aids_raw(list(AIDS_EVOLUCAO_ESPERADO) + ["2.0"])})
-    # 9 e em branco saem no filtro de evolução conhecida; 3 sai como censura
-    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 1, "sem_codigo": 0, "mantidos": 3}
-    assert "1 casos censurados (EVOLUCAO 3)" in caplog.text
+    # 3 sai como censura; 9 e em branco saem contados como sem código, não
+    # num filtro anterior que os descartava sem contar
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 1, "sem_codigo": 2, "mantidos": 3}
+    assert "1 casos censurados (EVOLUCAO 3) e 2 sem código válido" in caplog.text
     y = oc.get_target(oc.build_features(cohort))
     assert y.tolist() == [0, 1, 1]
 

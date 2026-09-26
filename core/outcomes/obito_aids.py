@@ -15,7 +15,8 @@ class ObitoAIDS(OutcomeConfig):
             description=(
                 "Prediz a probabilidade de óbito por AIDS (EVOLUCAO = 2), contra vivo "
                 "(EVOLUCAO = 1), em pacientes recém-notificados. Óbito por outras causas "
-                "(EVOLUCAO = 3) é censura e sai da coorte. "
+                "(EVOLUCAO = 3) é censura; ignorado (9) e em branco ficam sem rótulo. Os dois "
+                "grupos saem da coorte. "
                 "Features incluem doenças definidoras de AIDS presentes "
                 "no diagnóstico (tuberculose, candidíase, toxoplasmose, etc.), "
                 "via de transmissão, critério diagnóstico e características demográficas. "
@@ -40,8 +41,8 @@ class ObitoAIDS(OutcomeConfig):
 
     def build_cohort(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = aids_prep.preprocess(data["SINAN_AIDS"])
-        df = aids_prep.filter_with_outcome(df)
-        # Óbito por outras causas (3) sai da coorte em vez de virar 0
+        # Óbito por outras causas (3), ignorado (9) e em branco saem da coorte
+        # em vez de virar 0, cada grupo com sua contagem
         df = aids_prep.drop_censored(df, self.target_col)
         df = df.drop(columns=["vivo", "EVOLUCAO", "DT_OBITO"], errors="ignore")
         return df
