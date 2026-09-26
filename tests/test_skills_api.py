@@ -34,6 +34,7 @@ DOCS = sorted((ROOT / ".claude" / "skills").glob("*/SKILL.md")) + sorted(
 CALL_MODULES = [
     "core.models.pipeline",
     "core.models.evaluation",
+    "core.models.metrics",
     "core.data.downloader",
     "core.features.cohort",
     "core.features.engineering",

@@ -2,7 +2,8 @@
 
 Referência para interpretar, modificar ou adicionar métricas e visualizações.
 
-**Arquivo central:** `core/models/evaluation.py`
+**Arquivo central:** `core/models/evaluation.py` (gráficos Plotly)
+**Métricas clínicas:** `core/models/metrics.py` (IC por bootstrap, CITL, slope, O:E, ECE, decision curve e EPV; funções puras sobre `y_true` e `y_prob`, sem Streamlit)
 **Calibração:** `calibrate_model` em `core/models/pipeline.py`, chamada na seção Calibração da etapa de resultados (`pages/analise.py`)
 **Benchmark entre estados:** `pages/calibracao.py` (etapa 8)
 **SHAP:** integrado em `evaluation.py`, `pages/analise.py` e `pages/deploy.py`
@@ -29,6 +30,7 @@ from core.models.evaluation import (
 | `pr_chart(y, p)`     | y_true, oof_probs               | Curva PR + linha de baseline (prevalência) |
 | `calibration_chart(y, p, n_bins=10)` | y_true, oof_probs | Scatter calibração + diagonal perfeita |
 | `importance_chart(importances, top_n=20)` | feature_importances dict | Barras horizontais top-20 (usado apenas no relatório/deploy) |
+| `decision_curve_chart(curve, ranges=None)` | saída de `decision_curve` e de `net_benefit_ranges` | Benefício líquido do modelo, de tratar todos e de ninguém, com a faixa de ganho acima da margem sombreada |
 | `shap_summary(model, X, max_display=20)` | pipeline treinado, X | Barras mean \|SHAP\| top-20 |
 | `shap_beeswarm(model, X, max_display=15)` | pipeline treinado, X | Scatter por amostra: X=SHAP, Y=feature, cor=valor |
 
@@ -42,14 +44,54 @@ Também em `evaluation.py`: `threshold_metrics(y, p, threshold=0.5)` (sensibilid
 
 A métrica principal, o ponto de corte e o que reportar de calibração e de utilidade clínica saem da `ml-checkpoints`: a métrica principal e o ponto de corte são escolhidos no CP8, antes de rodar, e a decision curve compara o modelo com tratar todos e com não tratar ninguém; a calibração é reportada com slope, intercepto e Brier (CP9). A tabela do relatório é a da `ml-eval-report`. O porquê está em `docs/aprendizados-pipeline-agentes.md`, no ai-lab-hub: o item 7 trata do O:E e do calibration-in-the-large que o balanceamento degrada, e o item 13, da margem sobre a melhor estratégia trivial na decision curve.
 
-O que o app calcula hoje e o que falta:
+O que o app calcula e onde:
 
 | Item | No código do app |
 |---|---|
-| ROC-AUC, PR-AUC, F1, precisão, recall, especificidade, Brier | `_compute_metrics` em `core/models/pipeline.py`; as de classe no corte 0,5 |
+| ROC-AUC, PR-AUC, F1, precisão, recall, especificidade, Brier por fold | `_compute_metrics` em `core/models/pipeline.py`; as de classe no corte 0,5 |
 | métricas num corte escolhido | `threshold_metrics(y, p, threshold)` |
 | curva de calibração e Brier antes e depois de calibrar | `calibration_chart`, `calibrate_model`, `calibration_comparison_chart` |
-| O:E, calibration-in-the-large, slope, IC e decision curve | ainda não existem no código: calcule fora do app e reporte ao lado |
+| AUROC, AP, Brier, CITL, slope, O:E e ECE com IC 95% | `performance_summary` e `bootstrap_ci` em `core/models/metrics.py`; tabela `summary_table` |
+| decision curve e faixa de utilidade | `decision_curve`, `net_benefit_ranges`, `format_ranges`; gráfico `decision_curve_chart` |
+| EPV e N mínimo | `events_per_variable`, `epv_message`; parâmetros do modelo por `n_model_features` em `core/models/pipeline.py` |
+
+Na tela, a tabela com IC e o EPV aparecem sempre na etapa de resultados de `pages/analise.py` (bloco Incerteza e calibração), e a decision curve na seção Decision Curve, com a margem editável. O `pages/relatorio.py` repete os dois e leva as tabelas para o HTML exportado, junto com O:E, CITL, slope, ECE e Brier antes e depois de calibrar.
+
+---
+
+## Métricas de `core/models/metrics.py`
+
+```python
+from core.models.metrics import (
+    performance_summary, summary_table, bootstrap_ci,
+    calibration_in_the_large, logistic_recalibration, calibration_slope,
+    observed_expected_ratio, expected_calibration_error,
+    decision_curve, net_benefit_ranges, format_ranges,
+    events_per_variable, epv_message,
+)
+
+s = performance_summary(y_eval, probs, n_boot=1000, seed=42, n_bins=10)
+tabela = summary_table(s)            # métrica, valor, IC 95% inf. e sup., valor ideal
+s["metrics"]["citl"]                 # {"value", "ci_low", "ci_high", "n_valid"}
+s["warnings"]                        # textos dos avisos (métrica indefinida etc.)
+
+dc = decision_curve(y_eval, probs)   # limiares 0,01 a 0,99
+faixas = net_benefit_ranges(dc, margin=0.01)
+format_ranges(faixas["relevant_gain"]), format_ranges(faixas["any_gain"])
+
+epv = events_per_variable(y_treino, n_predictors=12, min_epv=10)
+```
+
+Como cada uma é calculada:
+
+- **CITL**: intercepto de `logit P(y=1) = a + logit(p)`, com `logit(p)` como offset, por máxima verossimilhança. Não é o intercepto da recalibração com slope livre, que `logistic_recalibration` devolve junto com o slope.
+- **Slope**: coeficiente de `logit(p)` na recalibração logística `b0 + b1 * logit(p)`, sem penalização.
+- **O:E**: eventos observados sobre a soma das probabilidades. **ECE**: bins de largura fixa, `n_bins` como parâmetro.
+- **IC**: bootstrap percentil estratificado pelo desfecho (cada réplica sorteia positivos entre positivos e negativos entre negativos), semeado; a mesma semente reproduz o IC.
+- **Decision curve**: benefício líquido `VP/n - FP/n * t/(1 - t)`, tratando quem tem `p >= t`, contra tratar todos e ninguém. `net_benefit_ranges` separa a faixa com qualquer ganho sobre a melhor estratégia trivial e a faixa com ganho de pelo menos `margin`, com os trechos quando não é contígua.
+- **Casos degenerados**: uma classe só, probabilidade exatamente 0 ou 1 (no CITL e no slope), predição constante e separação completa devolvem NaN com `MetricWarning`; `clip` trunca p de propósito quando for o caso.
+
+Em validação cruzada, a tela calcula sobre `oof_probs` (predições fora do fold); em holdout e corte temporal, sobre o teste (`y_eval`).
 
 ---
 
@@ -195,7 +237,8 @@ A página não desenha curva de calibração por grupo. Para checar calibração
 
 ## Adicionando nova métrica
 
-1. Calcular em `_compute_metrics(y_true, probs, preds)` em `core/models/pipeline.py`, que alimenta `fold_metrics` e `mean_metrics` do `train_cv`
+0. Métrica sobre `y_true` e `y_prob` que precisa de IC: implementar em `core/models/metrics.py`, com o cálculo por pesos de grupo em `_replicate` e o nome em `METRIC_LABELS` e `METRIC_REFERENCE`, para entrar em `bootstrap_ci`, na tabela da tela e no relatório
+1. Métrica por fold: calcular em `_compute_metrics(y_true, probs, preds)` em `core/models/pipeline.py`, que alimenta `fold_metrics` e `mean_metrics` do `train_cv`
 2. Repetir o cálculo nos ramos de holdout e de corte temporal da etapa de treino em `pages/analise.py`, que montam o dict de métricas por conta própria, e em `_apply_model_to_subset` de `pages/calibracao.py`
 3. Exibir na etapa de resultados (`pages/analise.py`, etapa 7) e, se for o caso, em `fold_metrics_table`
 4. Se precisar de gráfico: adicionar função em `core/models/evaluation.py`

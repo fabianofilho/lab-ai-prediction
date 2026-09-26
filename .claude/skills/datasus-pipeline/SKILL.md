@@ -54,7 +54,7 @@ Com reamostragem o retorno é um `imblearn.pipeline.Pipeline`; sem ela, um `skle
 
 `use_smote=True` é o parâmetro legado: com `balancing="none"`, equivale a `smote_over`.
 
-O padrão é `none`, na API e na tela. Balancear muda a probabilidade prevista, então `class_weight` ou reamostragem só entram com a calibração medida com e sem o balanceamento: compare o Brier (`train_cv(...)["mean_metrics"]["brier"]`) e a curva de calibração (`calibration_chart`) nas mesmas partições, e registre a decisão com o motivo. Quando considerar balancear é decisão do CP5 da `ml-checkpoints`, e o que medir na calibração é do CP9; esta skill não repete essas regras. Slope e O:E ainda não estão no código (ver `datasus-avaliacao`).
+O padrão é `none`, na API e na tela. Balancear muda a probabilidade prevista, então `class_weight` ou reamostragem só entram com a calibração medida com e sem o balanceamento: compare o Brier (`train_cv(...)["mean_metrics"]["brier"]`) e a curva de calibração (`calibration_chart`) nas mesmas partições, e registre a decisão com o motivo. Quando considerar balancear é decisão do CP5 da `ml-checkpoints`, e o que medir na calibração é do CP9; esta skill não repete essas regras. CITL, slope e O:E com IC estão em `core/models/metrics.py` e aparecem na etapa de resultados (ver `datasus-avaliacao`).
 
 ---
 

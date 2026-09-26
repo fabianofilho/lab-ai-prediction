@@ -571,3 +571,53 @@ def fold_metrics_table(fold_metrics: list[dict]) -> pd.DataFrame:
     df = df[cols_present]
     df[cols_present] = df[cols_present].round(4)
     return df
+
+
+def decision_curve_chart(curve: pd.DataFrame, ranges: dict | None = None) -> go.Figure:
+    """Decision curve: benefício líquido do modelo, de tratar todos e de ninguém.
+
+    ``curve`` é a saída de ``core.models.metrics.decision_curve``; ``ranges``,
+    a de ``net_benefit_ranges``, sombreia a faixa com ganho de pelo menos a
+    margem sobre a melhor estratégia trivial. O eixo y corta o benefício muito
+    negativo de tratar todos em limiar alto, que só achataria a curva.
+    """
+    t = curve["threshold"]
+    fig = go.Figure()
+    if ranges:
+        for lo, hi in ranges.get("relevant_gain", []):
+            fig.add_vrect(x0=lo, x1=hi, fillcolor="#22c55e", opacity=0.12,
+                          line_width=0, layer="below")
+    fig.add_trace(go.Scatter(
+        x=t, y=curve["net_benefit_none"], mode="lines", name="Não tratar ninguém",
+        line={"color": "#374151", "width": 1.5},
+        hovertemplate="%{y:.4f}",
+    ))
+    fig.add_trace(go.Scatter(
+        x=t, y=curve["net_benefit_all"], mode="lines", name="Tratar todos",
+        line={"color": "#9ca3af", "width": 2, "dash": "dash"},
+        hovertemplate="%{y:.4f}",
+    ))
+    fig.add_trace(go.Scatter(
+        x=t, y=curve["net_benefit_model"], mode="lines", name="Modelo",
+        line={"color": "#3b82f6", "width": 2.5},
+        hovertemplate="%{y:.4f}",
+    ))
+    top = float(np.nanmax([curve["net_benefit_model"].max(), curve["net_benefit_all"].max(), 0.0]))
+    if not np.isfinite(top) or top <= 0:
+        top = 0.05
+    title = "Decision curve: benefício líquido por limiar"
+    if ranges:
+        from core.models.metrics import format_ranges
+        title += (f"<br><sup>Ganho ≥ {ranges['margin']:.3f} sobre a melhor estratégia "
+                  f"trivial: {format_ranges(ranges.get('relevant_gain', []))}</sup>")
+    fig.update_layout(
+        title=title,
+        xaxis={"title": "Limiar de probabilidade (tratar se p ≥ limiar)",
+               "range": [0, 1], "tickformat": ".0%"},
+        yaxis={"title": "Benefício líquido", "range": [-0.25 * top, 1.1 * top]},
+        height=420, hovermode="x unified",
+        legend={"orientation": "h", "yanchor": "bottom", "y": -0.3},
+        margin={"t": 70, "b": 40},
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
