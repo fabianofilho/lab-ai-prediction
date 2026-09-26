@@ -565,17 +565,25 @@ OUTCOME_CLS = {
     "intoxicacao_grave": IntoxicacaoGrave,
     "obito_aids": ObitoAIDS,
 }
+ROTULOS_CITADOS = sorted(OUTCOME_CLS)
 
-# chave -> (campo, positivos, negativos, censura), das constantes do preprocessador
-ROTULOS_CITADOS = {
-    "abandono_hanseniase": ("TPALTA_N", hans_prep.TPALTA_ABANDONO, hans_prep.TPALTA_CURA,
-                            hans_prep.TPALTA_CENSURA_ABANDONO),
-    "incapacidade_hanseniase": ("AVALIA_N", {"2"}, {"0", "1"}, hans_prep.AVALIA_NAO_AVALIADO),
-    "intoxicacao_grave": ("EVOLUCAO", iexo_prep.EVOLUCAO_ADVERSO, iexo_prep.EVOLUCAO_CURA_SEM_SEQUELA,
-                          iexo_prep.EVOLUCAO_CENSURA),
-    "obito_aids": ("EVOLUCAO", aids_prep.EVOLUCAO_OBITO_AIDS, aids_prep.EVOLUCAO_VIVO,
-                   aids_prep.EVOLUCAO_CENSURA),
-}
+
+def _rotulo_das_constantes(chave):
+    """(campo, positivos, negativos, censura), das constantes do preprocessador.
+
+    Lido na hora do teste, não na coleta: com um preprocessador antigo sem
+    a constante, só este teste falha, e os outros do arquivo ainda rodam.
+    """
+    if chave == "abandono_hanseniase":
+        return ("TPALTA_N", hans_prep.TPALTA_ABANDONO, hans_prep.TPALTA_CURA,
+                hans_prep.TPALTA_CENSURA_ABANDONO)
+    if chave == "incapacidade_hanseniase":
+        return ("AVALIA_N", {"2"}, {"0", "1"}, hans_prep.AVALIA_NAO_AVALIADO)
+    if chave == "intoxicacao_grave":
+        return ("EVOLUCAO", iexo_prep.EVOLUCAO_ADVERSO, iexo_prep.EVOLUCAO_CURA_SEM_SEQUELA,
+                iexo_prep.EVOLUCAO_CENSURA)
+    return ("EVOLUCAO", aids_prep.EVOLUCAO_OBITO_AIDS, aids_prep.EVOLUCAO_VIVO,
+            aids_prep.EVOLUCAO_CENSURA)
 
 
 def _citados(texto, campo):
@@ -592,10 +600,10 @@ def _positivo_negativo_resto(texto, campo):
     return _citados(antes, campo), _citados(frase, campo), _citados(resto, campo)
 
 
-@pytest.mark.parametrize("chave", sorted(ROTULOS_CITADOS))
+@pytest.mark.parametrize("chave", ROTULOS_CITADOS)
 @pytest.mark.parametrize("fonte", ["drawer", "descricao"])
 def test_textos_citam_positivo_e_negativo_das_constantes(chave, fonte):
-    campo, positivos, negativos, censura = ROTULOS_CITADOS[chave]
+    campo, positivos, negativos, censura = _rotulo_das_constantes(chave)
     if fonte == "drawer":
         texto = METHODOLOGY[chave]["target"]
     else:
@@ -606,9 +614,9 @@ def test_textos_citam_positivo_e_negativo_das_constantes(chave, fonte):
     assert resto <= set(censura), f"{chave} ({fonte}): {sorted(resto - set(censura))} não é censura"
 
 
-@pytest.mark.parametrize("chave", sorted(ROTULOS_CITADOS))
+@pytest.mark.parametrize("chave", ROTULOS_CITADOS)
 def test_drawer_so_cita_censura_na_coorte(chave):
-    campo, _, _, censura = ROTULOS_CITADOS[chave]
+    campo, _, _, censura = _rotulo_das_constantes(chave)
     citados = _citados(METHODOLOGY[chave]["pull"], campo)
     assert citados <= set(censura), f"{chave}: o pull cita {sorted(citados - set(censura))} fora da censura"
 
