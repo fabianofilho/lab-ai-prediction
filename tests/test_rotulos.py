@@ -14,6 +14,7 @@ import pytest
 
 from core.data import rotulo
 from core.data import sinan as tb_prep
+from core.data import sinan_chik as chik_prep
 from core.data import sinan_deng as deng_prep
 from core.data import sinan_hans as hans_prep
 from core.data import sinan_iexo as iexo_prep
@@ -405,3 +406,28 @@ def test_intoxicacao_tentativa_suicidio_e_circunstan_10():
     codigos = list(IEXO_CIRCUNSTAN_ESPERADO)
     df = iexo_prep.preprocess(_iexo_raw(["1"] * len(codigos), circunstan=codigos))
     assert df["tentativa_suicidio"].tolist() == list(IEXO_CIRCUNSTAN_ESPERADO.values())
+
+
+# ── Chikungunya: EVOLUCAO ────────────────────────────────────────────────────
+
+# Dicionário do SINAN-Chikungunya (PySUS 0.15.0, CHIK.csv, campo 65; o
+# microdatasus concorda). Nenhum desfecho usa a flag obito hoje.
+CHIK_EVOLUCAO_ESPERADO = {
+    "1": 0,     # cura
+    "2": 1,     # óbito pelo agravo
+    "3": 0,     # óbito por outras causas (o app lia como óbito por chikungunya)
+    "4": 0,     # óbito em investigação
+    "9": 0,     # ignorado
+}
+
+
+def test_chikungunya_obito_pelo_agravo_e_evolucao_2():
+    codigos = list(CHIK_EVOLUCAO_ESPERADO)
+    raw = pd.DataFrame({
+        "CLASSI_FIN": ["13"] * len(codigos),
+        "EVOLUCAO": codigos,
+        "HOSPITALIZ": ["2"] * len(codigos),
+        "NU_IDADE_N": [4050] * len(codigos),
+    })
+    df = chik_prep.preprocess(raw)
+    assert df["obito"].tolist() == list(CHIK_EVOLUCAO_ESPERADO.values())

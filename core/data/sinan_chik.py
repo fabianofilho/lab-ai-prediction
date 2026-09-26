@@ -7,8 +7,8 @@ KEEP_COLS = [
     "SG_UF_NOT", "ID_MUNICIP", "ID_MN_RESI",
     "NU_IDADE_N", "CS_SEXO", "CS_GESTANT", "CS_RACA", "CS_ESCOL_N",
     "CLASSI_FIN",       # 13=confirmado chik, 5=descartado
-    "EVOLUCAO",         # 1=cura, 3=óbito, 9=ignorado
-    "HOSPITALIZ",       # 1=sim, 2=não
+    "EVOLUCAO",         # 1=cura, 2=óbito pelo agravo, 3=óbito por outras causas, 4=óbito em investigação, 9=ignorado
+    "HOSPITALIZ",       # 1=sim, 2=não, 9=ignorado
     "DT_OBITO",
     # Sintomas
     "FEBRE", "MIALGIA", "CEFALEIA", "EXANTEMA", "VOMITO",
@@ -24,7 +24,11 @@ KEEP_COLS = [
 ]
 
 CLASSI_CONFIRMADO = "13"
-EVOLUCAO_OBITO = "3"
+# EVOLUCAO (campo 65) no dicionário do SINAN-Chikungunya: PySUS 0.15.0,
+# pysus/metadata/SINAN/CHIK.csv, e microdatasus 3.0.0,
+# R/process_sinan_chikungunya.R, conferidos em 2026-09-26. O óbito pela
+# chikungunya é 2; 3 é óbito por outras causas.
+EVOLUCAO_OBITO = "2"
 
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
