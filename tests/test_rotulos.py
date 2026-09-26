@@ -357,6 +357,12 @@ def test_hanseniase_incapacidade_coorte_exclui_nao_avaliado(caplog):
     assert "AVALIA_N" not in cohort.columns and "grau_incapacidade" not in cohort.columns
 
 
+def test_hanseniase_incapacidade_sem_avalia_n_falha_em_vez_de_zerar():
+    raw = _hans_avalia_raw(["0", "2"]).drop(columns=["AVALIA_N"])
+    with pytest.raises(KeyError, match="AVALIA_N ausente"):
+        IncapacidadeHanseniase().build_cohort({"SINAN_HANS": raw})
+
+
 def test_hanseniase_incapacidade_get_target_nao_preenche_com_zero():
     oc = IncapacidadeHanseniase()
     with pytest.raises(ValueError, match="censura"):

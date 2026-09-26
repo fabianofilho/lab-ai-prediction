@@ -48,16 +48,16 @@ class IncapacidadeHanseniase(OutcomeConfig):
 
         # Alvo: grau II ao diagnóstico (AVALIA_N 2) contra grau zero e grau I.
         # Não avaliado (3) é censura e o em branco fica sem código: os dois
-        # saem da coorte em vez de virar 0.
-        if "AVALIA_N" in df.columns:
-            df["incapacidade_g2"] = rotulo.alvo_com_censura(
-                rotulo.codigo(df["AVALIA_N"]), positivos={"2"}, negativos={"0", "1"},
-            )
-            df = rotulo.excluir_sem_rotulo(
-                df, "incapacidade_g2", "AVALIA_N", hans_prep.AVALIA_NAO_AVALIADO,
-            )
-        else:
-            df["incapacidade_g2"] = 0
+        # saem da coorte em vez de virar 0. Sem a coluna não há rótulo, e um
+        # alvo todo zero seria uma coorte 100% negativa sem aviso.
+        if "AVALIA_N" not in df.columns:
+            raise KeyError("AVALIA_N ausente: sem rótulo para incapacidade_g2")
+        df["incapacidade_g2"] = rotulo.alvo_com_censura(
+            rotulo.codigo(df["AVALIA_N"]), positivos={"2"}, negativos={"0", "1"},
+        )
+        df = rotulo.excluir_sem_rotulo(
+            df, "incapacidade_g2", "AVALIA_N", hans_prep.AVALIA_NAO_AVALIADO,
+        )
 
         # Tempo entre notificação e diagnóstico (proxy de atraso)
         if "DT_NOTIFIC" in df.columns and "DT_DIAG" in df.columns:
