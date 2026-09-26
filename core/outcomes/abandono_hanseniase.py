@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from core.outcomes.base import OutcomeConfig
+from core.data import rotulo
 from core.data import sinan_hans as hans_prep
 from core.features import engineering as eng
 
@@ -15,7 +16,10 @@ class AbandonoHanseniase(OutcomeConfig):
             key="abandono_hanseniase",
             name="Abandono de Tratamento — Hanseníase",
             description=(
-                "Prediz o risco de abandono do tratamento de hanseníase (TPALTA_N=3). "
+                "Prediz o risco de abandono do tratamento de hanseníase (TPALTA_N = 7), "
+                "contra a cura (TPALTA_N = 1). Transferências (2 a 5 e 9), óbito (6) e "
+                "erro diagnóstico (8) são censura; sem tipo de saída (em branco) fica sem "
+                "rótulo. Os dois grupos saem da coorte. "
                 "O tratamento padrão é 6 doses (PB) ou 12 doses (MB). "
                 "Features incluem forma clínica, grau de incapacidade ao diagnóstico, "
                 "modo de detecção, esquema terapêutico e características sociodemográficas. "
@@ -38,7 +42,9 @@ class AbandonoHanseniase(OutcomeConfig):
 
     def build_cohort(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = hans_prep.preprocess(data["SINAN_HANS"])
-        df = hans_prep.filter_closed_cases(df)
+        # Censura (transferência, óbito, erro diagnóstico) e caso sem tipo de
+        # saída válido saem em vez de virar 0, cada grupo com sua contagem
+        df = hans_prep.drop_censored(df, self.target_col)
         return df
 
     def build_features(self, cohort: pd.DataFrame) -> pd.DataFrame:
@@ -63,4 +69,5 @@ class AbandonoHanseniase(OutcomeConfig):
         return df
 
     def get_target(self, cohort: pd.DataFrame) -> pd.Series:
-        return cohort[self.target_col].fillna(0).astype(int)
+        # Sem fillna(0): censura não é negativo. build_cohort já exclui esses casos.
+        return rotulo.exigir_rotulo(cohort[self.target_col], self.key)

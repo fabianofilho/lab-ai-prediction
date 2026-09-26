@@ -71,24 +71,24 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "A detecção exige ambas as internações na amostra: use amostra grande (≥ 30.000). Amostras pequenas quebram os pares e subestimam a readmissão.",
     },
     "abandono_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados com situação de encerramento conhecida. Transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log.",
-        "target": "Encerramento por abandono (SITUA_ENCE = 2) ou abandono primário (SITUA_ENCE = 10). Cura (1), óbito por TB (3), óbito por outras causas (4) e falência (9) são negativos.",
-        "caveat": "Mapa de SITUA_ENCE conferido com o dicionário do SINAN-TB usado no PySUS e no sinan-continual-learning, mas ainda não contra um arquivo TUBEBR bruto.",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados com situação de encerramento conhecida. Óbito por TB (3), óbito por outras causas (4), transferência (5), mudança de diagnóstico (6), TB-DR (7) e mudança de esquema (8) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log.",
+        "target": "Encerramento por abandono (SITUA_ENCE = 2) ou abandono primário (SITUA_ENCE = 10). Cura (1) e falência (9) são negativos.",
+        "caveat": "Mapa de SITUA_ENCE conferido com o dicionário do SINAN-TB usado no PySUS e no sinan-continual-learning, mas ainda não contra um arquivo TUBEBR bruto. Óbito é censura por risco competitivo, por decisão do lab: quem morreu antes de encerrar o tratamento não teve como abandoná-lo.",
     },
     "obito_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; transferência, mudança de diagnóstico, TB-DR e mudança de esquema (SITUA_ENCE 5 a 8) são censura e saem da coorte. SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
-        "target": "Óbito ao encerramento do caso, por TB (SITUA_ENCE = 3) ou por outras causas (SITUA_ENCE = 4). Cura, abandono, falência e abandono primário são negativos. Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
-        "caveat": "Óbito por outras causas conta como positivo; tratá-lo como risco competitivo é decisão metodológica ainda em aberto.",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados. Abandono (2), transferência (5), mudança de diagnóstico (6), TB-DR (7), mudança de esquema (8) e abandono primário (10) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log. SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
+        "target": "Óbito ao encerramento do caso, por TB (SITUA_ENCE = 3) ou por outras causas (SITUA_ENCE = 4), contra cura (SITUA_ENCE = 1) e falência (SITUA_ENCE = 9). Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
+        "caveat": "Abandono é censura por risco competitivo, por decisão do lab: quem abandonou saiu de vista antes do encerramento. Óbito por outras causas conta como positivo; tratá-lo como risco competitivo é decisão metodológica ainda em aberto.",
     },
     "abandono_hanseniase": {
-        "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos encerrados.",
-        "target": "Saída por abandono de tratamento (TPALTA_N = 3).",
-        "caveat": "O código de abandono em TPALTA_N ainda não foi conferido com o dicionário oficial do SINAN-Hanseníase; o resultado deste desfecho depende dessa conferência.",
+        "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos com saída por cura ou abandono. Transferências (2 a 5 e 9), óbito (6) e erro diagnóstico (8) são censura; sem tipo de saída (em branco) ou com código fora do dicionário fica sem rótulo. Os dois grupos saem da coorte em vez de virar negativo, e cada contagem vai para o log.",
+        "target": "Saída por abandono de tratamento (TPALTA_N = 7), contra a cura (TPALTA_N = 1).",
+        "caveat": "Mapa de TPALTA_N conferido com o dicionário do SINAN-Hanseníase (PySUS 0.15.0), mas ainda não contra um arquivo HANSBR bruto. Óbito é censura por risco competitivo, por decisão do lab.",
     },
     "incapacidade_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). AVALIA_N/grau_incapacidade (fonte do alvo) e colunas pós-tratamento (TPALTA_N, doses) saem das preditoras.",
-        "target": "Incapacidade física grau 2 (G2D) ao diagnóstico (AVALIA_N = 2), indicador de detecção tardia monitorado pela OMS. Features: forma clínica, classificação operacional, modo de detecção, baciloscopia, tempo notificação-diagnóstico e demografia.",
-        "caveat": "Desfecho moderadamente desbalanceado; AUC modesta (~0,65) por ser predição de detecção tardia a partir de características de base.",
+        "target": "Incapacidade física grau 2 (G2D) ao diagnóstico (AVALIA_N = 2), indicador de detecção tardia monitorado pela OMS, contra grau zero e grau I (AVALIA_N = 0 ou 1). Não avaliado (AVALIA_N = 3) e em branco saem da coorte em vez de virar negativo. Features: forma clínica, classificação operacional, modo de detecção, baciloscopia, tempo notificação-diagnóstico e demografia.",
+        "caveat": "Desfecho moderadamente desbalanceado. Espere AUC modesta, por ser predição de detecção tardia a partir de características de base. A AUC vista antes deste rótulo foi medida numa coorte em que não avaliado e em branco contavam como grau zero, e não vale para a coorte atual: refazer.",
     },
     "dengue_grave": {
         "pull": "Base SINAN-Dengue (nacional, filtrada por UF; arquivo grande, 1º download mais lento). CLASSI_FIN, sinais de alarme (ALRM_*), sinais de gravidade (GRAV_*) e hospitalização saem das preditoras: definem ou decorrem da classificação final.",
@@ -100,8 +100,9 @@ METHODOLOGY: dict[str, dict] = {
         "target": "Necessidade de hospitalização (HOSPITALIZ = 1).",
     },
     "obito_aids": {
-        "pull": "Base SINAN-AIDS adulto (nacional, filtrada por UF). Doenças definidoras de AIDS entram como features; EVOLUCAO sai.",
-        "target": "Evolução para óbito por AIDS (EVOLUCAO = 2).",
+        "pull": "Base SINAN-AIDS adulto (nacional, filtrada por UF). Coorte = casos com evolução vivo ou óbito por AIDS. Óbito por outras causas (EVOLUCAO = 3) é censura; ignorado (9) e em branco ficam sem rótulo. Os dois grupos saem da coorte em vez de virar negativo, e cada contagem vai para o log. Doenças definidoras de AIDS entram como features; EVOLUCAO sai.",
+        "target": "Evolução para óbito por AIDS (EVOLUCAO = 2), contra vivo (EVOLUCAO = 1).",
+        "caveat": "O mapa de EVOLUCAO do SINAN-AIDS ainda não foi conferido com o dicionário oficial nem com um arquivo AIDABR bruto. Óbito por outras causas é censura por risco competitivo, por decisão do lab.",
     },
     "sifilis_nao_cura": {
         "pull": "Base SINAN-Sífilis Adquirida (nacional, filtrada por UF). Coorte = casos confirmados com evolução conhecida.",
@@ -113,8 +114,9 @@ METHODOLOGY: dict[str, dict] = {
         "target": "Lesão autoprovocada (LES_AUTOP = 1), com consequência suicida / violência autoprovocada como fallback de anos antigos.",
     },
     "intoxicacao_grave": {
-        "pull": "Base SINAN-Intoxicação Exógena (nacional, filtrada por UF). Coorte = casos confirmados com evolução conhecida; EVOLUCAO sai das preditoras.",
-        "target": "Desfecho adverso: óbito ou incapacidade permanente na evolução do caso.",
+        "pull": "Base SINAN-Intoxicação Exógena (nacional, filtrada por UF). Coorte = intoxicações confirmadas (CLASSI_FIN = 1) com evolução conhecida; EVOLUCAO sai das preditoras. Óbito por outra causa (EVOLUCAO = 4) e perda de seguimento (5) são censura; ignorado (9) e em branco ficam sem rótulo. Os dois grupos saem da coorte em vez de virar negativo, e a contagem vai para o log.",
+        "target": "Desfecho adverso: óbito por intoxicação exógena (EVOLUCAO = 3) ou cura com sequela (EVOLUCAO = 2), contra cura sem sequela (EVOLUCAO = 1).",
+        "caveat": "Mapa de EVOLUCAO conferido com o dicionário do SINAN-Intoxicação Exógena (PySUS 0.15.0), mas ainda não contra um arquivo IEXOBR bruto. Óbito por outra causa é censura por risco competitivo, por decisão do lab.",
     },
 }
 

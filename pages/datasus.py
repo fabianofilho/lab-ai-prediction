@@ -64,7 +64,7 @@ OUTCOME_GROUPS = {
          "note": "Base única SINAN_TB. Pipeline completo disponível."},
         {"key": "obito_tb", "icon": "sentiment_very_dissatisfied", "name": "Óbito em Tuberculose",
          "source": "SINAN", "est_min": 8, "status": "ok", "linkage": None,
-         "note": "Base única SINAN_TB. Óbito ao encerramento do caso."},
+         "note": "Base única SINAN_TB. Óbito ao encerramento do caso; abandono é censura."},
         {"key": "abandono_hanseniase", "icon": "stethoscope", "name": "Abandono de Tratamento — Hanseníase",
          "source": "SINAN", "est_min": 5, "status": "ok", "linkage": None,
          "note": "Base única SINAN_HANS. Pipeline completo disponível."},

@@ -9,6 +9,7 @@ from __future__ import annotations
 import pandas as pd
 
 from core.outcomes.base import OutcomeConfig
+from core.data import rotulo
 from core.data import sinan_hans as hans_prep
 from core.features import engineering as eng
 
@@ -20,10 +21,12 @@ class IncapacidadeHanseniase(OutcomeConfig):
             name="Incapacidade Grau 2 — Hanseníase",
             description=(
                 "Prediz a presença de incapacidade física grau 2 (G2D) ao diagnóstico "
-                "de hanseníase, indicador de detecção tardia monitorado pela OMS "
-                "(AVALIA_N = 2). Features incluem forma clínica, classificação "
-                "operacional, modo de detecção, baciloscopia, tempo entre notificação "
-                "e diagnóstico, e características sociodemográficas. Utiliza SINAN-Hanseníase."
+                "de hanseníase (AVALIA_N = 2), indicador de detecção tardia monitorado "
+                "pela OMS, contra grau zero e grau I (AVALIA_N = 0 ou 1). Não avaliado "
+                "(AVALIA_N = 3) e em branco saem da coorte. Features incluem forma "
+                "clínica, classificação operacional, modo de detecção, baciloscopia, "
+                "tempo entre notificação e diagnóstico, e características "
+                "sociodemográficas. Utiliza SINAN-Hanseníase."
             ),
             data_sources=["SINAN_HANS"],
             observation_window_days=0,
@@ -43,13 +46,18 @@ class IncapacidadeHanseniase(OutcomeConfig):
     def build_cohort(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = hans_prep.preprocess(data["SINAN_HANS"])
 
-        # Alvo: grau de incapacidade 2 ao diagnóstico (AVALIA_N == 2)
-        if "grau_incapacidade" in df.columns:
-            df["incapacidade_g2"] = (
-                pd.to_numeric(df["grau_incapacidade"], errors="coerce") == 2
-            ).astype(int)
-        else:
-            df["incapacidade_g2"] = 0
+        # Alvo: grau II ao diagnóstico (AVALIA_N 2) contra grau zero e grau I.
+        # Não avaliado (3) é censura e o em branco fica sem código: os dois
+        # saem da coorte em vez de virar 0. Sem a coluna não há rótulo, e um
+        # alvo todo zero seria uma coorte 100% negativa sem aviso.
+        if "AVALIA_N" not in df.columns:
+            raise KeyError("AVALIA_N ausente: sem rótulo para incapacidade_g2")
+        df["incapacidade_g2"] = rotulo.alvo_com_censura(
+            rotulo.codigo(df["AVALIA_N"]), positivos={"2"}, negativos={"0", "1"},
+        )
+        df = rotulo.excluir_sem_rotulo(
+            df, "incapacidade_g2", "AVALIA_N", hans_prep.AVALIA_NAO_AVALIADO,
+        )
 
         # Tempo entre notificação e diagnóstico (proxy de atraso)
         if "DT_NOTIFIC" in df.columns and "DT_DIAG" in df.columns:
@@ -88,4 +96,5 @@ class IncapacidadeHanseniase(OutcomeConfig):
         return df
 
     def get_target(self, cohort: pd.DataFrame) -> pd.Series:
-        return cohort[self.target_col].fillna(0).astype(int)
+        # Sem fillna(0): não avaliado não é grau zero. build_cohort já exclui.
+        return rotulo.exigir_rotulo(cohort[self.target_col], self.key)

@@ -2,6 +2,8 @@
 from __future__ import annotations
 import pandas as pd
 
+from core.data import rotulo
+
 KEEP_COLS = [
     "NU_NOTIFIC", "DT_NOTIFIC", "DT_DIAG", "DT_CONFIRM",
     "SG_UF_NOT", "ID_MUNICIP", "ID_MN_RESI",
@@ -22,8 +24,16 @@ KEEP_COLS = [
     "LAB_TRIAGE", "LAB_CONFIR",
 ]
 
-EVOLUCAO_OBITO_AIDS = "2"
-EVOLUCAO_VIVO = "1"
+# EVOLUCAO na ficha de aids adulto: 1 vivo, 2 óbito por aids, 3 óbito por
+# outras causas, 9 ignorado. Mapa do próprio app, NÃO conferido contra o
+# dicionário oficial: o PySUS 0.15.0 e o microdatasus 3.0.0 não trazem o
+# SINAN-AIDS, e o portal do SINAN estava bloqueado. Conferir contra a ficha
+# e um AIDABR bruto.
+EVOLUCAO_OBITO_AIDS = {"2"}
+EVOLUCAO_VIVO = {"1"}
+# Censura: óbito por outras causas (risco competitivo, decisão do lab
+# estendida do abandono de TB). Ignorado e em branco também ficam sem rótulo.
+EVOLUCAO_CENSURA = {"3"}
 
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
@@ -37,10 +47,12 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     if "NU_IDADE_N" in df.columns:
         df["idade_anos"] = _decode_idade(df["NU_IDADE_N"])
 
+    # Alvo com censura: 1 óbito por aids, 0 vivo e NaN para óbito por outras
+    # causas, ignorado ou em branco (ver drop_censored)
     if "EVOLUCAO" in df.columns:
-        evolucao = df["EVOLUCAO"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-        df["obito_aids"] = (evolucao == EVOLUCAO_OBITO_AIDS).astype(int)
-        df["vivo"] = (evolucao == EVOLUCAO_VIVO).astype(int)
+        evolucao = rotulo.codigo(df["EVOLUCAO"])
+        df["obito_aids"] = rotulo.alvo_com_censura(evolucao, EVOLUCAO_OBITO_AIDS, EVOLUCAO_VIVO)
+        df["vivo"] = evolucao.isin(EVOLUCAO_VIVO).astype(int)
 
     # AIDS-defining disease count
     ad_cols = [c for c in ["ANT_SARCOM", "ANT_TUBERC", "ANT_CANDID", "ANT_PULMON",
@@ -64,12 +76,15 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def filter_with_outcome(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only cases with a known outcome (non-empty EVOLUCAO)."""
-    if "EVOLUCAO" in df.columns:
-        known = df["EVOLUCAO"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(["1", "2", "3"])
-        return df[known].copy()
-    return df
+def drop_censored(df: pd.DataFrame, target_col: str = "obito_aids") -> pd.DataFrame:
+    """Tira da coorte o óbito por outras causas (EVOLUCAO 3, censura) e o que
+    não tem código válido (ignorado, em branco, fora do dicionário), com as
+    duas contagens em ``df.attrs["exclusoes_rotulo"]`` e no log.
+
+    Não filtre a evolução conhecida antes: o filtro tiraria o 9 e o em
+    branco sem contá-los.
+    """
+    return rotulo.excluir_sem_rotulo(df, target_col, "EVOLUCAO", EVOLUCAO_CENSURA)
 
 
 def _decode_idade(serie: pd.Series) -> pd.Series:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import pandas as pd
 from core.outcomes.base import OutcomeConfig
+from core.data import rotulo
 from core.data import sinan_aids as aids_prep
 from core.features import engineering as eng
 
@@ -12,8 +13,11 @@ class ObitoAIDS(OutcomeConfig):
             key="obito_aids",
             name="Óbito por AIDS",
             description=(
-                "Prediz a probabilidade de óbito por AIDS (EVOLUCAO=2) em pacientes "
-                "recém-notificados. Features incluem doenças definidoras de AIDS presentes "
+                "Prediz a probabilidade de óbito por AIDS (EVOLUCAO = 2), contra vivo "
+                "(EVOLUCAO = 1), em pacientes recém-notificados. Óbito por outras causas "
+                "(EVOLUCAO = 3) é censura; ignorado (9) e em branco ficam sem rótulo. Os dois "
+                "grupos saem da coorte. "
+                "Features incluem doenças definidoras de AIDS presentes "
                 "no diagnóstico (tuberculose, candidíase, toxoplasmose, etc.), "
                 "via de transmissão, critério diagnóstico e características demográficas. "
                 "Utiliza SINAN-AIDS Adulto."
@@ -37,7 +41,9 @@ class ObitoAIDS(OutcomeConfig):
 
     def build_cohort(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = aids_prep.preprocess(data["SINAN_AIDS"])
-        df = aids_prep.filter_with_outcome(df)
+        # Óbito por outras causas (3), ignorado (9) e em branco saem da coorte
+        # em vez de virar 0, cada grupo com sua contagem
+        df = aids_prep.drop_censored(df, self.target_col)
         df = df.drop(columns=["vivo", "EVOLUCAO", "DT_OBITO"], errors="ignore")
         return df
 
@@ -55,4 +61,5 @@ class ObitoAIDS(OutcomeConfig):
         return df
 
     def get_target(self, cohort: pd.DataFrame) -> pd.Series:
-        return cohort[self.target_col].fillna(0).astype(int)
+        # Sem fillna(0): censura não é negativo. build_cohort já exclui esses casos.
+        return rotulo.exigir_rotulo(cohort[self.target_col], self.key)
