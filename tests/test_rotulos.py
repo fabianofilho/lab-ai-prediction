@@ -59,10 +59,10 @@ def test_exigir_rotulo_falha_com_nan():
 
 # Código bruto -> (abandono esperado, obito_tb esperado). NaN = censura ou
 # código fora do dicionário, que sai da coorte. No abandono, o óbito é
-# censura por risco competitivo.
+# censura por risco competitivo; no óbito, o abandono também.
 TB_ESPERADO = {
     "1": (0, 0),              # cura
-    "2": (1, 0),              # abandono
+    "2": (1, np.nan),         # abandono (censura no óbito)
     "3": (np.nan, 1),         # óbito por TB
     "4": (np.nan, 1),         # óbito por outras causas
     "5": (np.nan, np.nan),    # transferência (censura)
@@ -70,7 +70,7 @@ TB_ESPERADO = {
     "7": (np.nan, np.nan),    # TB-DR (censura)
     "8": (np.nan, np.nan),    # mudança de esquema (censura)
     "9": (0, 0),              # falência
-    "10": (1, 0),             # abandono primário
+    "10": (1, np.nan),        # abandono primário (censura no óbito)
     "": (np.nan, np.nan),     # em branco: sem código válido
 }
 
@@ -102,7 +102,8 @@ def test_tb_codigo_bruto_com_espaco_e_float():
     df = tb_prep.preprocess(_tb_raw([" 2", "2.0", "10 ", 3, " 1"]))
     assert df["abandono"].iloc[[0, 1, 2, 4]].tolist() == [1.0, 1.0, 1.0, 0.0]
     assert np.isnan(df["abandono"].iloc[3]), "óbito por TB é censura no abandono"
-    assert df["obito_tb"].tolist() == [0.0, 0.0, 0.0, 1.0, 0.0]
+    assert df["obito_tb"].iloc[[3, 4]].tolist() == [1.0, 0.0]
+    assert df["obito_tb"].iloc[[0, 1, 2]].isna().all(), "abandono é censura no óbito"
 
 
 def test_tb_codigo_com_zero_a_esquerda():
@@ -112,7 +113,8 @@ def test_tb_codigo_com_zero_a_esquerda():
     abandono = df["abandono"].tolist()
     assert [abandono[i] for i in (0, 1, 4, 5)] == [0.0, 1.0, 0.0, 1.0]
     assert np.isnan(abandono[2]) and np.isnan(abandono[3]), "óbito e transferência são censura"
-    assert df["obito_tb"].iloc[[0, 1, 2, 4, 5]].tolist() == [0.0, 0.0, 1.0, 0.0, 0.0]
+    assert df["obito_tb"].iloc[[0, 2, 4]].tolist() == [0.0, 1.0, 0.0]
+    assert df["obito_tb"].iloc[[1, 5]].isna().all(), "abandono é censura no óbito"
 
     cohort = AbandonoTB().build_cohort({"SINAN_TB": _tb_raw(["01", "02", "03", "05", "09", "10"])})
     assert cohort.attrs["exclusoes_rotulo"] == {"censura": 2, "sem_codigo": 0, "mantidos": 4}
@@ -123,7 +125,8 @@ def test_tb_positivos_e_censura_sao_os_do_dicionario():
     assert tb_prep.SITUA_OBITO == {"3", "4"}
     assert tb_prep.SITUA_CENSURA == {"5", "6", "7", "8"}
     assert tb_prep.CENSURA_POR_ALVO["abandono"] == {"3", "4", "5", "6", "7", "8"}
-    assert tb_prep.CENSURA_POR_ALVO["obito_tb"] == {"5", "6", "7", "8"}
+    assert tb_prep.CENSURA_POR_ALVO["obito_tb"] == {"2", "5", "6", "7", "8", "10"}
+    assert tb_prep.SITUA_NEGATIVO_OBITO == {"1", "9"}
     assert tb_prep.SITUA_NEGATIVO_ABANDONO == {"1", "9"}
     # obito por TB (3) nunca pode voltar a ser abandono, nem abandono (2) obito
     assert "3" not in tb_prep.SITUA_ABANDONO
@@ -132,7 +135,7 @@ def test_tb_positivos_e_censura_sao_os_do_dicionario():
 
 @pytest.mark.parametrize("outcome_cls, positivos, n_censura", [
     (AbandonoTB, {"2", "10"}, 6),   # 3 a 8
-    (ObitoTB, {"3", "4"}, 4),       # 5 a 8
+    (ObitoTB, {"3", "4"}, 6),       # 2, 5 a 8 e 10
 ])
 def test_tb_coorte_exclui_censura_e_conta(outcome_cls, positivos, n_censura, caplog):
     oc = outcome_cls()
@@ -637,3 +640,16 @@ def test_textos_do_abandono_tb_poem_o_obito_na_censura():
     for cod in tb_prep.CENSURA_POR_ALVO["abandono"]:
         assert f"({cod})" in meth["pull"], f"censura {cod} fora do drawer"
 
+
+
+def test_textos_do_obito_tb_poem_o_abandono_na_censura():
+    meth = METHODOLOGY["obito_tb"]
+    assert _citados(meth["target"], "SITUA_ENCE") == tb_prep.SITUA_OBITO | tb_prep.SITUA_NEGATIVO_OBITO
+    for texto in (meth["target"], ObitoTB().description):
+        pos, neg, _ = _positivo_negativo_resto(texto, "SITUA_ENCE")
+        assert pos == tb_prep.SITUA_OBITO, f"positivo citado {sorted(pos)}"
+        assert neg == tb_prep.SITUA_NEGATIVO_OBITO, f"negativo citado {sorted(neg)}"
+        frase = texto.split("contra", 1)[1].partition(".")[0]
+        assert "abandono" not in frase.lower(), f"abandono entre os negativos: {frase!r}"
+    for cod in tb_prep.CENSURA_POR_ALVO["obito_tb"]:
+        assert f"({cod})" in meth["pull"], f"censura {cod} fora do drawer"

@@ -76,9 +76,9 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "Mapa de SITUA_ENCE conferido com o dicionário do SINAN-TB usado no PySUS e no sinan-continual-learning, mas ainda não contra um arquivo TUBEBR bruto. Óbito é censura por risco competitivo, por decisão do lab: quem morreu antes de encerrar o tratamento não teve como abandoná-lo.",
     },
     "obito_tb": {
-        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados; transferência, mudança de diagnóstico, TB-DR e mudança de esquema (SITUA_ENCE 5 a 8) são censura e saem da coorte. SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
-        "target": "Óbito ao encerramento do caso, por TB (SITUA_ENCE = 3) ou por outras causas (SITUA_ENCE = 4). Cura, abandono, falência e abandono primário são negativos. Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
-        "caveat": "Óbito por outras causas conta como positivo; tratá-lo como risco competitivo é decisão metodológica ainda em aberto.",
+        "pull": "Base SINAN-Tuberculose (nacional, filtrada por UF). Coorte = casos encerrados. Abandono (2), transferência (5), mudança de diagnóstico (6), TB-DR (7), mudança de esquema (8) e abandono primário (10) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log. SITUA_ENCE e os flags de abandono/cura saem das preditoras (anti-leakage).",
+        "target": "Óbito ao encerramento do caso, por TB (SITUA_ENCE = 3) ou por outras causas (SITUA_ENCE = 4), contra cura (SITUA_ENCE = 1) e falência (SITUA_ENCE = 9). Features de notificação: forma clínica, baciloscopia, cultura, HIV, supervisão do tratamento e demografia.",
+        "caveat": "Abandono é censura por risco competitivo, por decisão do lab: quem abandonou saiu de vista antes do encerramento. Óbito por outras causas conta como positivo; tratá-lo como risco competitivo é decisão metodológica ainda em aberto.",
     },
     "abandono_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos com saída por cura ou abandono. Transferências (2 a 5 e 9), óbito (6) e erro diagnóstico (8) são censura; sem tipo de saída (em branco) ou com código fora do dicionário fica sem rótulo. Os dois grupos saem da coorte em vez de virar negativo, e cada contagem vai para o log.",

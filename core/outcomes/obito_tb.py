@@ -16,9 +16,10 @@ class ObitoTB(OutcomeConfig):
             name="Óbito em Tuberculose",
             description=(
                 "Prediz o risco de óbito (por TB ou outra causa) ao encerramento do "
-                "caso de tuberculose (SITUA_ENCE = 3 ou 4). Transferência, mudança de "
-                "diagnóstico, TB-DR e mudança de esquema (5 a 8) são censura e saem da "
-                "coorte. Utiliza dados do SINAN-TB. "
+                "caso de tuberculose (SITUA_ENCE = 3 ou 4), contra cura e falência "
+                "(SITUA_ENCE = 1 ou 9). Abandono e abandono primário (2 e 10), "
+                "transferência, mudança de diagnóstico, TB-DR e mudança de esquema "
+                "(5 a 8) são censura e saem da coorte. Utiliza dados do SINAN-TB. "
                 "Features incluem forma clínica, baciloscopia, cultura, co-infecção HIV, "
                 "supervisão do tratamento (DOT) e características sociodemográficas, "
                 "todas disponíveis na notificação inicial."
@@ -43,7 +44,7 @@ class ObitoTB(OutcomeConfig):
         df = sinan_prep.preprocess(data["SINAN_TB"])
         # Apenas casos encerrados (desfecho definitivo conhecido)
         df = sinan_prep.filter_closed_cases(df)
-        # Censura (SITUA_ENCE 5 a 8) sai da coorte em vez de virar 0
+        # Censura (SITUA_ENCE 2, 5 a 8 e 10) sai da coorte em vez de virar 0
         df = sinan_prep.drop_censored(df, self.target_col)
         # Remove colunas-fonte do alvo para evitar vazamento
         df = df.drop(columns=["SITUA_ENCE", "abandono", "cura"], errors="ignore")

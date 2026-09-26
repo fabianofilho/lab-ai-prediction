@@ -76,10 +76,15 @@ SITUA_CENSURA_ABANDONO = SITUA_CENSURA | SITUA_OBITO
 # Negativos de cada alvo. O que não é positivo, negativo nem censura (em
 # branco, código fora do dicionário) também fica sem rótulo.
 SITUA_NEGATIVO_ABANDONO = SITUA_CURA | SITUA_FALENCIA
-SITUA_NEGATIVO_OBITO = SITUA_CURA | SITUA_ABANDONO | SITUA_FALENCIA
+SITUA_NEGATIVO_OBITO = SITUA_CURA | SITUA_FALENCIA
+
+# No óbito, o abandono (2 e 10) também é censura, pela mesma decisão do lab:
+# quem abandonou saiu de vista antes do encerramento, e contá-lo como 0
+# afirmaria que ele não morreu.
+SITUA_CENSURA_OBITO = SITUA_CENSURA | SITUA_ABANDONO
 CENSURA_POR_ALVO = {
     "abandono": SITUA_CENSURA_ABANDONO,
-    "obito_tb": SITUA_CENSURA,
+    "obito_tb": SITUA_CENSURA_OBITO,
 }
 
 
