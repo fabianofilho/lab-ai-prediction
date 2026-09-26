@@ -416,7 +416,7 @@ _SINAN_HANS: dict[str, dict] = {
     },
     "grau_incapacidade": {
         "label": "Grau de Incapacidade",
-        "desc": "Avaliação do grau de incapacidade física no diagnóstico: Grau 0, Grau 1, Grau 2.",
+        "desc": "Avaliação do grau de incapacidade física no diagnóstico (AVALIA_N): Grau 0 (0), Grau I (1), Grau II (2). Não avaliado (3) vira ausente.",
         "type": "Ordinal",
         "values": {"0": "Grau 0", "1": "Grau 1", "2": "Grau 2"},
     },

@@ -20,7 +20,7 @@ KEEP_COLS = [
     "MODODETECT",      # detection mode: 1=demand, 2=active, etc.
     "BACILOSCOP",      # baciloscopy: 0=neg, 1=pos, 2=not done
     "ESQ_INI_N",       # initial treatment scheme: 1=PB 6 doses, 2=MB 12 doses
-    "AVALIA_N",        # disability evaluation at diagnosis: 0,1,2,9
+    "AVALIA_N",        # grau de incapacidade no diagnóstico: ver AVALIA_N_MAPA
     # Outcome
     "TPALTA_N",        # tipo de saída: ver TPALTA_N_MAPA abaixo
     "DTALTA_N",        # discharge date
@@ -55,6 +55,12 @@ TPALTA_ERRO_DIAGNOSTICO = {"8"}
 # do abandono de TB). Esses casos saem da coorte e nunca viram 0.
 TPALTA_CENSURA_ABANDONO = TPALTA_TRANSFERENCIA | TPALTA_ERRO_DIAGNOSTICO | TPALTA_OBITO
 
+# AVALIA_N (campo 37, avaliação do grau de incapacidade física no
+# diagnóstico), mesmo dicionário: 3 é "não avaliado", não um grau acima de 2.
+AVALIA_N_MAPA = {"0": "grau zero", "1": "grau I", "2": "grau II", "3": "não avaliado"}
+AVALIA_GRAUS = {"0", "1", "2"}
+AVALIA_NAO_AVALIADO = {"3"}
+
 # CLASSOPERA: 1 paucibacilar (PB), 2 multibacilar (MB), conforme o PySUS
 CLASSOPERA_MB = "2"
 
@@ -85,9 +91,12 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     if "CLASSOPERA" in df.columns:
         df["mb"] = (df["CLASSOPERA"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True) == CLASSOPERA_MB).astype(int)
 
-    # Disability at diagnosis
+    # Grau de incapacidade no diagnóstico (0, 1 ou 2). Não avaliado (3),
+    # em branco e código fora do dicionário viram NaN, nunca um grau.
     if "AVALIA_N" in df.columns:
-        df["grau_incapacidade"] = pd.to_numeric(df["AVALIA_N"], errors="coerce")
+        avalia = rotulo.codigo(df["AVALIA_N"])
+        grau = pd.to_numeric(avalia.where(avalia.isin(AVALIA_GRAUS)), errors="coerce")
+        df["grau_incapacidade"] = grau.astype(float)
 
     # Standardize categoricals
     for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N"]:

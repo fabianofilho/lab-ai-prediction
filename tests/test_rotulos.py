@@ -276,3 +276,52 @@ def test_hanseniase_abandono_get_target_nao_preenche_censura_com_zero():
     oc = AbandonoHanseniase()
     with pytest.raises(ValueError, match="censura"):
         oc.get_target(pd.DataFrame({oc.target_col: [1.0, 0.0, np.nan]}))
+
+
+# ── Hanseníase: AVALIA_N (grau de incapacidade no diagnóstico) ───────────────
+
+# Dicionário do SINAN-Hanseníase (PySUS 0.15.0, HANS.csv, campo 37).
+# Código -> (grau_incapacidade esperado, incapacidade_g2 esperado).
+HANS_AVALIA_ESPERADO = {
+    "0": (0.0, 0),          # grau zero
+    "1": (1.0, 0),          # grau I
+    "2": (2.0, 1),          # grau II
+    "3": (np.nan, None),    # não avaliado: nem grau 3, nem grau zero
+    "": (np.nan, None),     # em branco
+}
+
+
+def _hans_avalia_raw(codigos):
+    raw = _hans_saida_raw(["1"] * len(codigos))
+    raw["AVALIA_N"] = codigos
+    raw["DT_NOTIFIC"] = pd.to_datetime(["2023-03-01"] * len(codigos))
+    raw["DT_DIAG"] = pd.to_datetime(["2023-02-20"] * len(codigos))
+    return raw
+
+
+def test_hanseniase_avalia_nao_avaliado_nao_e_grau():
+    df = hans_prep.preprocess(_hans_avalia_raw(list(HANS_AVALIA_ESPERADO)))
+    for i, (cod, (grau, _)) in enumerate(HANS_AVALIA_ESPERADO.items()):
+        got = df["grau_incapacidade"].iloc[i]
+        if np.isnan(grau):
+            assert np.isnan(got), f"AVALIA_N {cod!r}: grau_incapacidade deveria ser ausente, veio {got}"
+        else:
+            assert got == grau, f"AVALIA_N {cod!r}: grau_incapacidade {got} != {grau}"
+
+
+def test_hanseniase_incapacidade_coorte_exclui_nao_avaliado(caplog):
+    oc = IncapacidadeHanseniase()
+    with caplog.at_level(logging.WARNING):
+        cohort = oc.build_cohort({"SINAN_HANS": _hans_avalia_raw(list(HANS_AVALIA_ESPERADO))})
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 1, "sem_codigo": 1, "mantidos": 3}
+    assert "1 casos censurados (AVALIA_N 3)" in caplog.text
+    y = oc.get_target(oc.build_features(cohort))
+    esperado = [g2 for g2 in (v[1] for v in HANS_AVALIA_ESPERADO.values()) if g2 is not None]
+    assert y.tolist() == esperado
+    assert "AVALIA_N" not in cohort.columns and "grau_incapacidade" not in cohort.columns
+
+
+def test_hanseniase_incapacidade_get_target_nao_preenche_com_zero():
+    oc = IncapacidadeHanseniase()
+    with pytest.raises(ValueError, match="censura"):
+        oc.get_target(pd.DataFrame({oc.target_col: [1.0, np.nan]}))
