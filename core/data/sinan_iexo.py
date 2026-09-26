@@ -17,7 +17,7 @@ KEEP_COLS = [
     "AGENTE_TOX",       # categoria do agente
     "AGENTE_1", "AGENTE_2", "AGENTE_3",
     # Circunstância / intenção
-    "CIRCUNSTAN",       # 1=acidental, 2=tentativa suicídio, 3=homicídio, 4=abuso, etc.
+    "CIRCUNSTAN",       # circunstância da exposição: ver CIRCUNSTAN_SUICIDIO abaixo
     "UTILIZACAO",
     # Via de exposição
     "VIA_1", "VIA_2", "VIA_3",
@@ -46,7 +46,13 @@ EVOLUCAO_ADVERSO = {"2", "3"}  # cura com sequela e óbito por intoxicação ex�
 # perda de seguimento (desfecho desconhecido). Ignorado (9) e em branco
 # também ficam sem rótulo. Nenhum deles vira 0.
 EVOLUCAO_CENSURA = {"4", "5"}
-CIRCUNSTAN_SUICIDIO = "2"
+# CIRCUNSTAN (campo 55, circunstância da exposição), mesmo dicionário, com
+# dois dígitos: 01 uso habitual, 02 acidental, 03 ambiental, 04 uso
+# terapêutico, 05 prescrição médica inadequada, 06 erro de administração,
+# 07 automedicação, 08 abuso, 09 ingestão de alimento ou bebida,
+# 10 tentativa de suicídio, 11 tentativa de aborto, 12 violência/homicídio,
+# 13 outra, 99 ignorado. rotulo.codigo tira o zero à esquerda ("02" vira "2").
+CIRCUNSTAN_SUICIDIO = "10"
 
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
@@ -74,9 +80,7 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
         df["sequela"] = (evolucao == "2").astype(int)  # cura com sequela
 
     if "CIRCUNSTAN" in df.columns:
-        df["tentativa_suicidio"] = (
-            df["CIRCUNSTAN"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True) == CIRCUNSTAN_SUICIDIO
-        ).astype(int)
+        df["tentativa_suicidio"] = (rotulo.codigo(df["CIRCUNSTAN"]) == CIRCUNSTAN_SUICIDIO).astype(int)
 
     for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N"]:
         if col in df.columns:

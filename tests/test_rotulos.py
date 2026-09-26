@@ -385,3 +385,23 @@ def test_intoxicacao_get_target_nao_preenche_censura_com_zero():
     oc = IntoxicacaoGrave()
     with pytest.raises(ValueError, match="censura"):
         oc.get_target(pd.DataFrame({oc.target_col: [1.0, np.nan]}))
+
+
+# ── Intoxicação exógena: CIRCUNSTAN ──────────────────────────────────────────
+
+# Dicionário do SINAN-Intoxicação Exógena (PySUS 0.15.0, IEXO.csv, campo 55):
+# 02 é uso acidental e 10 é tentativa de suicídio.
+IEXO_CIRCUNSTAN_ESPERADO = {
+    "02": 0,     # acidental (o app lia "2" como tentativa de suicídio)
+    "2": 0,      # acidental sem o zero à esquerda
+    "10": 1,     # tentativa de suicídio
+    "10.0": 1,
+    "12": 0,     # violência/homicídio
+    "99": 0,     # ignorado (a troca de 0 por ausente nas features fica para a migração)
+}
+
+
+def test_intoxicacao_tentativa_suicidio_e_circunstan_10():
+    codigos = list(IEXO_CIRCUNSTAN_ESPERADO)
+    df = iexo_prep.preprocess(_iexo_raw(["1"] * len(codigos), circunstan=codigos))
+    assert df["tentativa_suicidio"].tolist() == list(IEXO_CIRCUNSTAN_ESPERADO.values())
