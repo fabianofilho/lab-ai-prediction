@@ -213,3 +213,66 @@ def test_hanseniase_desfechos_usam_mb_do_classopera(outcome_cls):
     assert "mb" in oc.suggested_features
     cohort = oc.build_features(oc.build_cohort({"SINAN_HANS": _hans_raw()}))
     assert cohort["mb"].tolist() == [0, 0, 1, 1, 1]
+
+
+# ── Hanseníase: TPALTA_N (tipo de saída) ─────────────────────────────────────
+
+# Dicionário do SINAN-Hanseníase (PySUS 0.15.0, HANS.csv, campo 19).
+# Código -> abandono esperado. NaN = censura ou sem código, sai da coorte.
+HANS_TPALTA_ESPERADO = {
+    "1": 0,            # cura
+    "2": np.nan,       # transferência para o mesmo município
+    "3": np.nan,       # transferência para outro município (o app lia abandono)
+    "4": np.nan,       # transferência para outro estado
+    "5": np.nan,       # transferência para outro país
+    "6": np.nan,       # óbito (risco competitivo)
+    "7": 1,            # abandono
+    "8": np.nan,       # erro diagnóstico
+    "9": np.nan,       # transferência não especificada
+    "": np.nan,        # em branco
+}
+
+
+def _hans_saida_raw(codigos):
+    n = len(codigos)
+    return pd.DataFrame({
+        "TPALTA_N": codigos,
+        "CLASSOPERA": ["2"] * n,
+        "AVALIA_N": ["0"] * n,
+        "NU_IDADE_N": [4040] * n,
+        "CS_SEXO": ["F"] * n,
+    })
+
+
+def test_hanseniase_tpalta_mapa_abandono():
+    df = hans_prep.preprocess(_hans_saida_raw(list(HANS_TPALTA_ESPERADO)))
+    for i, (cod, esperado) in enumerate(HANS_TPALTA_ESPERADO.items()):
+        got = df["abandono"].iloc[i]
+        if np.isnan(esperado):
+            assert np.isnan(got), f"TPALTA_N {cod!r}: abandono deveria ficar sem rótulo, veio {got}"
+        else:
+            assert got == esperado, f"TPALTA_N {cod!r}: abandono {got} != {esperado}"
+
+
+def test_hanseniase_filtro_de_encerrados_mantem_o_abandono():
+    df = hans_prep.filter_closed_cases(hans_prep.preprocess(_hans_saida_raw(["1", "6", "7", "8", "9", "", "0"])))
+    assert df["TPALTA_N"].tolist() == ["1", "6", "7", "8", "9"]
+
+
+def test_hanseniase_abandono_coorte_exclui_censura_e_conta(caplog):
+    oc = AbandonoHanseniase()
+    raw = _hans_saida_raw(list(HANS_TPALTA_ESPERADO) + ["7.0", " 1"])
+    with caplog.at_level(logging.WARNING):
+        cohort = oc.build_cohort({"SINAN_HANS": raw})
+
+    # 7 censurados (2 a 6, 8 e 9); o em branco sai no filtro de encerrados
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 7, "sem_codigo": 0, "mantidos": 4}
+    assert "7 casos censurados (TPALTA_N 2, 3, 4, 5, 6, 8, 9)" in caplog.text
+    y = oc.get_target(oc.build_features(cohort))
+    assert y.tolist() == [0, 1, 1, 0]
+
+
+def test_hanseniase_abandono_get_target_nao_preenche_censura_com_zero():
+    oc = AbandonoHanseniase()
+    with pytest.raises(ValueError, match="censura"):
+        oc.get_target(pd.DataFrame({oc.target_col: [1.0, 0.0, np.nan]}))

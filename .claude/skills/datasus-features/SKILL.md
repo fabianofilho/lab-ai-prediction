@@ -114,7 +114,7 @@ Usar `info.get("label", col)` como fallback seguro na UI.
 | custo_elevado        | VAL_TOT                                | Target = percentil de VAL_TOT   |
 | infeccao_hospitalar  | DIAG_SEC (cols T80-T88)               | Target é o próprio diagnóstico  |
 | abandono_tb          | SITUA_ENCE                             | Target deriva de SITUA_ENCE     |
-| abandono_hanseniase  | coluna de encerramento                | Target = encerramento ≠ cura    |
+| abandono_hanseniase  | TPALTA_N, DTALTA_N, abandono, cura     | Target = TPALTA_N 7 contra 1; censura sai da coorte |
 
 Remover com: `df.drop(columns=[...], errors="ignore")`
 

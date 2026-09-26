@@ -81,9 +81,9 @@ METHODOLOGY: dict[str, dict] = {
         "caveat": "Óbito por outras causas conta como positivo; tratá-lo como risco competitivo é decisão metodológica ainda em aberto.",
     },
     "abandono_hanseniase": {
-        "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos encerrados.",
-        "target": "Saída por abandono de tratamento (TPALTA_N = 3).",
-        "caveat": "O código de abandono em TPALTA_N ainda não foi conferido com o dicionário oficial do SINAN-Hanseníase; o resultado deste desfecho depende dessa conferência.",
+        "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). Coorte = casos com tipo de saída registrado (TPALTA_N 1 a 9). Transferências (2 a 5 e 9), óbito (6) e erro diagnóstico (8) são censura: saem da coorte em vez de virar negativo, e a contagem de excluídos vai para o log.",
+        "target": "Saída por abandono de tratamento (TPALTA_N = 7), contra a cura (TPALTA_N = 1).",
+        "caveat": "Mapa de TPALTA_N conferido com o dicionário do SINAN-Hanseníase (PySUS 0.15.0), mas ainda não contra um arquivo HANSBR bruto. Óbito é censura por risco competitivo, por decisão do lab.",
     },
     "incapacidade_hanseniase": {
         "pull": "Base SINAN-Hanseníase (nacional, filtrada por UF). AVALIA_N/grau_incapacidade (fonte do alvo) e colunas pós-tratamento (TPALTA_N, doses) saem das preditoras.",

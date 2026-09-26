@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from core.data import rotulo
+
 
 KEEP_COLS = [
     "TP_NOT",
@@ -20,19 +22,38 @@ KEEP_COLS = [
     "ESQ_INI_N",       # initial treatment scheme: 1=PB 6 doses, 2=MB 12 doses
     "AVALIA_N",        # disability evaluation at diagnosis: 0,1,2,9
     # Outcome
-    "TPALTA_N",        # discharge type: 1=cure, 2=death, 3=abandonment, 4=transfer
+    "TPALTA_N",        # tipo de saída: ver TPALTA_N_MAPA abaixo
     "DTALTA_N",        # discharge date
     # Treatment tracking
     "DOSE_RECEB",      # doses received
     "DTULTCOMP",       # last completion date
 ]
 
-# Mapa de TPALTA_N ainda NÃO conferido contra o dicionário oficial nem contra
-# um HANSBR bruto. Suspeita da revisão da Onda 0: 7 abandono, 2 a 5
-# transferências, 6 óbito, 8 erro diagnóstico. Não alterar sem essa conferência.
-TPALTA_ABANDONO = "3"
-TPALTA_CURA = "1"
-TPALTA_OBITO = "2"
+# TPALTA_N (campo 19, tipo de saída) no dicionário do SINAN-Hanseníase:
+# PySUS 0.15.0, pysus/metadata/SINAN/HANS.csv, conferido em 2026-09-26.
+# 9 não é digitável: aparece em caso migrado ou notificado até a versão 1.3,
+# quando a saída administrativa era transferência. Não conferido contra um
+# HANSBR bruto (a rede do DataSUS estava bloqueada).
+TPALTA_N_MAPA = {
+    "1": "cura",
+    "2": "transferencia_mesmo_municipio",
+    "3": "transferencia_outro_municipio",
+    "4": "transferencia_outro_estado",
+    "5": "transferencia_outro_pais",
+    "6": "obito",
+    "7": "abandono",
+    "8": "erro_diagnostico",
+    "9": "transferencia_nao_especificada",
+}
+TPALTA_CURA = {"1"}
+TPALTA_ABANDONO = {"7"}
+TPALTA_OBITO = {"6"}
+TPALTA_TRANSFERENCIA = {"2", "3", "4", "5", "9"}
+TPALTA_ERRO_DIAGNOSTICO = {"8"}
+# Censura do abandono: transferência (o caso saiu de vista), erro
+# diagnóstico (não era hanseníase) e óbito (risco competitivo, mesma decisão
+# do abandono de TB). Esses casos saem da coorte e nunca viram 0.
+TPALTA_CENSURA_ABANDONO = TPALTA_TRANSFERENCIA | TPALTA_ERRO_DIAGNOSTICO | TPALTA_OBITO
 
 # CLASSOPERA: 1 paucibacilar (PB), 2 multibacilar (MB), conforme o PySUS
 CLASSOPERA_MB = "2"
@@ -52,11 +73,12 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     if "NU_IDADE_N" in df.columns:
         df["idade_anos"] = _decode_idade(df["NU_IDADE_N"])
 
-    # Outcome flags
+    # Alvo com censura: 1 abandono, 0 cura e NaN para censura ou código fora
+    # do dicionário (ver drop_censored)
     if "TPALTA_N" in df.columns:
-        alta = df["TPALTA_N"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-        df["abandono"] = (alta == TPALTA_ABANDONO).astype(int)
-        df["cura"] = (alta == TPALTA_CURA).astype(int)
+        alta = rotulo.codigo(df["TPALTA_N"])
+        df["abandono"] = rotulo.alvo_com_censura(alta, TPALTA_ABANDONO, TPALTA_CURA)
+        df["cura"] = alta.isin(TPALTA_CURA).astype(int)
 
     # Flag multibacilar: vem da classificação operacional (CLASSOPERA 2 = MB).
     # FORMACLINI 2 é a forma tuberculoide, que é paucibacilar.
@@ -76,11 +98,20 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def filter_closed_cases(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only cases with a recorded discharge outcome."""
+    """Mantém os casos com tipo de saída registrado (TPALTA_N 1 a 9).
+
+    O filtro antigo aceitava só 1 a 6 e descartava o abandono (7) antes do alvo.
+    """
     if "TPALTA_N" in df.columns:
-        closed = df["TPALTA_N"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).isin(["1", "2", "3", "4", "5", "6"])
+        closed = rotulo.codigo(df["TPALTA_N"]).isin(TPALTA_N_MAPA)
         return df[closed].copy()
     return df
+
+
+def drop_censored(df: pd.DataFrame, target_col: str = "abandono") -> pd.DataFrame:
+    """Tira da coorte do abandono a censura (TPALTA_N 2 a 6, 8 e 9) e o
+    código fora do dicionário, com a contagem em ``df.attrs``."""
+    return rotulo.excluir_sem_rotulo(df, target_col, "TPALTA_N", TPALTA_CENSURA_ABANDONO)
 
 
 def _decode_idade(serie: pd.Series) -> pd.Series:
