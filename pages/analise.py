@@ -3500,14 +3500,8 @@ if "multicalibracao" in ss.get("active_sections", set()):
         _mc_lbl = ss["mc_results"].get("method_label", ss["mc_results"]["method"])
 
         def _ece_mc(y_t, p, n_bins=10):
-            edges = _np_mc.linspace(0, 1, n_bins + 1)
-            ece = 0.0
-            for lo, hi in zip(edges[:-1], edges[1:]):
-                mask = (p >= lo) & (p < hi)
-                if mask.sum() == 0:
-                    continue
-                ece += mask.sum() / len(y_t) * abs(float(y_t[mask].mean()) - float(p[mask].mean()))
-            return ece
+            # mesma definição da tabela de incerteza (p = 1 entra no último bin)
+            return _mt.expected_calibration_error(y_t, _np_mc.clip(p, 0, 1), n_bins=n_bins)
 
         # ── Curva global ─────────────────────────────────────────────────────
         try:
