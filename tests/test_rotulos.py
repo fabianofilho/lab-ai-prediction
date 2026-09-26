@@ -7,6 +7,7 @@ hanseníase. Na Onda 2, os mapas conferidos contra o dicionário oficial
 pelo helper comum de core/data/rotulo.py.
 """
 import logging
+import re
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,7 @@ from core.data import sinan_deng as deng_prep
 from core.data import sinan_hans as hans_prep
 from core.data import sinan_iexo as iexo_prep
 from core.features.data_dict import FEATURE_DICT
+from core.methodology import METHODOLOGY
 from core.outcomes.abandono_hanseniase import AbandonoHanseniase
 from core.outcomes.abandono_tb import AbandonoTB
 from core.outcomes.dengue_grave import DengueGrave
@@ -545,3 +547,85 @@ def test_data_dict_modo_de_entrada_e_deteccao_da_hanseniase():
         "1": "Encaminhamento", "2": "Demanda espontânea", "3": "Exame de coletividade",
         "4": "Exame de contatos", "5": "Outros modos", "9": "Ignorado",
     }
+
+
+@pytest.mark.parametrize("chave", ["RACA_COR", "MODOENTR", "MODODETECT"])
+def test_data_dict_desc_cita_os_mesmos_codigos_dos_valores(chave):
+    # A descrição é o que a tela mostra; não pode divergir do mapa de valores
+    entrada = FEATURE_DICT[chave]
+    for cod, rotulo_valor in entrada["values"].items():
+        assert f"{rotulo_valor} ({cod})" in entrada["desc"], f"{chave}: falta '{rotulo_valor} ({cod})'"
+
+
+# ── Textos da tela (drawer e descrição) citam os códigos das constantes ──────
+
+OUTCOME_CLS = {
+    "abandono_hanseniase": AbandonoHanseniase,
+    "incapacidade_hanseniase": IncapacidadeHanseniase,
+    "intoxicacao_grave": IntoxicacaoGrave,
+    "obito_aids": ObitoAIDS,
+}
+
+# chave -> (campo, positivos, negativos, censura), das constantes do preprocessador
+ROTULOS_CITADOS = {
+    "abandono_hanseniase": ("TPALTA_N", hans_prep.TPALTA_ABANDONO, hans_prep.TPALTA_CURA,
+                            hans_prep.TPALTA_CENSURA_ABANDONO),
+    "incapacidade_hanseniase": ("AVALIA_N", {"2"}, {"0", "1"}, hans_prep.AVALIA_NAO_AVALIADO),
+    "intoxicacao_grave": ("EVOLUCAO", iexo_prep.EVOLUCAO_ADVERSO, iexo_prep.EVOLUCAO_CURA_SEM_SEQUELA,
+                          iexo_prep.EVOLUCAO_CENSURA),
+    "obito_aids": ("EVOLUCAO", aids_prep.EVOLUCAO_OBITO_AIDS, aids_prep.EVOLUCAO_VIVO,
+                   aids_prep.EVOLUCAO_CENSURA),
+}
+
+
+def _citados(texto, campo):
+    """Códigos citados como 'CAMPO = n' ou 'CAMPO = n ou m' (com ou sem espaço)."""
+    achados = re.findall(rf"\b{campo}\s*=\s*(\d+)(?:\s+ou\s+(\d+))?", texto)
+    return {c for par in achados for c in par if c}
+
+
+def _positivo_negativo_resto(texto, campo):
+    """Códigos antes de 'contra', na frase do 'contra' e depois dela."""
+    assert "contra" in texto, "o texto precisa dizer o positivo 'contra' o negativo"
+    antes, depois = texto.split("contra", 1)
+    frase, _, resto = depois.partition(".")
+    return _citados(antes, campo), _citados(frase, campo), _citados(resto, campo)
+
+
+@pytest.mark.parametrize("chave", sorted(ROTULOS_CITADOS))
+@pytest.mark.parametrize("fonte", ["drawer", "descricao"])
+def test_textos_citam_positivo_e_negativo_das_constantes(chave, fonte):
+    campo, positivos, negativos, censura = ROTULOS_CITADOS[chave]
+    if fonte == "drawer":
+        texto = METHODOLOGY[chave]["target"]
+    else:
+        texto = OUTCOME_CLS[chave]().description
+    pos, neg, resto = _positivo_negativo_resto(texto, campo)
+    assert pos == set(positivos), f"{chave} ({fonte}): positivo citado {sorted(pos)}"
+    assert neg == set(negativos), f"{chave} ({fonte}): negativo citado {sorted(neg)}"
+    assert resto <= set(censura), f"{chave} ({fonte}): {sorted(resto - set(censura))} não é censura"
+
+
+@pytest.mark.parametrize("chave", sorted(ROTULOS_CITADOS))
+def test_drawer_so_cita_censura_na_coorte(chave):
+    campo, _, _, censura = ROTULOS_CITADOS[chave]
+    citados = _citados(METHODOLOGY[chave]["pull"], campo)
+    assert citados <= set(censura), f"{chave}: o pull cita {sorted(citados - set(censura))} fora da censura"
+
+
+def test_textos_do_abandono_tb_poem_o_obito_na_censura():
+    meth = METHODOLOGY["abandono_tb"]
+    assert _citados(meth["target"], "SITUA_ENCE") == tb_prep.SITUA_ABANDONO
+    for texto in (meth["target"], AbandonoTB().description):
+        # a frase dos negativos: "Cura (1) e falência (9) são negativos" ou "contra ..."
+        achado = re.search(r"(?:contra [^.]*|[^.]*são negativos)", texto)
+        assert achado, f"sem frase de negativos: {texto!r}"
+        frase = achado.group(0)
+        for cod in tb_prep.SITUA_NEGATIVO_ABANDONO:
+            assert f"({cod})" in frase, f"negativo {cod} fora da frase: {frase!r}"
+        assert "óbito" not in frase.lower(), f"óbito entre os negativos: {frase!r}"
+        for cod in tb_prep.CENSURA_POR_ALVO["abandono"]:
+            assert f"({cod})" not in frase, f"censura {cod} entre os negativos: {frase!r}"
+    for cod in tb_prep.CENSURA_POR_ALVO["abandono"]:
+        assert f"({cod})" in meth["pull"], f"censura {cod} fora do drawer"
+

@@ -21,12 +21,12 @@ class IncapacidadeHanseniase(OutcomeConfig):
             name="Incapacidade Grau 2 — Hanseníase",
             description=(
                 "Prediz a presença de incapacidade física grau 2 (G2D) ao diagnóstico "
-                "de hanseníase, indicador de detecção tardia monitorado pela OMS "
-                "(AVALIA_N = 2). Features incluem forma clínica, classificação "
-                "operacional, modo de detecção, baciloscopia, tempo entre notificação "
-                "e diagnóstico, e características sociodemográficas. Grau zero e grau I "
-                "(AVALIA_N = 0 ou 1) são negativos; não avaliado (AVALIA_N = 3) e em "
-                "branco saem da coorte. Utiliza SINAN-Hanseníase."
+                "de hanseníase (AVALIA_N = 2), indicador de detecção tardia monitorado "
+                "pela OMS, contra grau zero e grau I (AVALIA_N = 0 ou 1). Não avaliado "
+                "(AVALIA_N = 3) e em branco saem da coorte. Features incluem forma "
+                "clínica, classificação operacional, modo de detecção, baciloscopia, "
+                "tempo entre notificação e diagnóstico, e características "
+                "sociodemográficas. Utiliza SINAN-Hanseníase."
             ),
             data_sources=["SINAN_HANS"],
             observation_window_days=0,
