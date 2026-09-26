@@ -1,5 +1,6 @@
 """Lab AI Prediction — wizard completo (carregado sob demanda)."""
 from __future__ import annotations
+import warnings as _warnings_mt
 from dataclasses import dataclass, field
 from pathlib import Path
 from PIL import Image as _PILImage
@@ -84,6 +85,20 @@ def _px():
 def _pd():
     import pandas as pd
     return pd
+
+@st.cache_resource(show_spinner=False)
+def _metrics():
+    import numpy as np
+
+    from core.models import metrics
+    from core.models.pipeline import n_model_features
+    return np, metrics, n_model_features
+
+@st.cache_data(show_spinner=False)
+def _clinical_summary(y_eval, probs, n_boot: int, seed: int) -> dict:
+    """IC por bootstrap das métricas de discriminação e calibração (cacheado)."""
+    from core.models.metrics import performance_summary
+    return performance_summary(y_eval, probs, n_boot=n_boot, seed=seed)
 
 _favicon = _PILImage.open(Path(__file__).parent.parent / "favicon.png")
 st.set_page_config(
@@ -2822,8 +2837,9 @@ if len(_all) <= 1:
     st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
 
 # ── Toggle pills (multi-select) ──────────────────────────────────────────────
-_sec_keys   = ["curvas", "distribuicao", "metricas_clinicas", "shap_global", "shap_individual", "equidade", "multicalibracao"]
-_sec_labels = ["Curvas ROC/PR", "Distribuição", "Métricas Clínicas",
+_sec_keys   = ["curvas", "distribuicao", "metricas_clinicas", "decision_curve",
+               "shap_global", "shap_individual", "equidade", "multicalibracao"]
+_sec_labels = ["Curvas ROC/PR", "Distribuição", "Métricas Clínicas", "Decision Curve",
                "SHAP Global", "SHAP Individual", "Equidade", "Multicalibração"]
 if "active_sections" not in ss:
     ss["active_sections"] = set()
@@ -2899,6 +2915,63 @@ else:
     y_arr = y.values
     _eval_index = None  # em CV o oof é full-length, alinha com a coorte inteira
 
+# ── Incerteza, calibração e tamanho de amostra [ML-06] ───────────────────────
+# O IC sai de bootstrap estratificado no conjunto de avaliação: o teste no
+# holdout e no corte temporal, as predições fora do fold na validação cruzada.
+# O EPV usa a partição em que o modelo avaliado foi treinado.
+_np_mt, _mt, _n_model_features = _metrics()
+
+_test_idx_mt = results.get("test_index")
+_y_dev_mt = y[~y.index.isin(_test_idx_mt)] if _test_idx_mt is not None else y
+with _warnings_mt.catch_warnings():
+    _warnings_mt.simplefilter("ignore", _mt.MetricWarning)
+    _epv_mt = _mt.events_per_variable(
+        _y_dev_mt.to_numpy(), _n_model_features(results["model"], X_res))
+results["epv"] = _epv_mt
+
+_y_eval_mt = _np_mt.asarray(y_arr, dtype=int)
+_p_eval_mt = _np_mt.asarray(oof, dtype=float)
+_n_boot_mt = 1000 if len(_y_eval_mt) <= 50_000 else 500
+_seed_mt = int(ss.get("sample_seed", 42))
+with st.spinner(f"Calculando IC por bootstrap ({_n_boot_mt} réplicas)…"):
+    _clin_mt = _clinical_summary(_y_eval_mt, _p_eval_mt, _n_boot_mt, _seed_mt)
+results["clinical_summary"] = _clin_mt
+
+st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+st.markdown("**Incerteza e calibração**")
+_eval_lbl_mt = ("predições fora do fold" if results.get("validation_strategy", "cv") == "cv"
+                else "conjunto de teste")
+st.dataframe(_mt.summary_table(_clin_mt), use_container_width=True, hide_index=True)
+st.caption(
+    f"IC 95% por bootstrap percentil estratificado pelo desfecho ({_clin_mt['n_boot']} "
+    f"réplicas, semente {_clin_mt['seed']}) sobre {_clin_mt['n']:,} registros de avaliação "
+    f"({_eval_lbl_mt}), com {_clin_mt['n_events']:,} eventos. CITL: intercepto da "
+    f"regressão logística com logit(p) como offset. Slope: coeficiente de logit(p) na "
+    f"recalibração logística. O:E: eventos observados sobre a soma das probabilidades. "
+    f"ECE com {_clin_mt['n_bins']} bins de largura fixa; tem viés para cima em amostra "
+    f"pequena, e o IC tende a ficar acima do valor pontual."
+)
+for _w_mt in _clin_mt["warnings"]:
+    warn_box(_w_mt)
+_epv_msg_mt = _mt.epv_message(_epv_mt)
+if _epv_msg_mt:
+    warn_box(
+        f"{_epv_msg_mt} Com poucos eventos por variável o modelo sobreajusta: prefira "
+        "modelo mais simples e menos variáveis (CP6 da ml-checkpoints)."
+    )
+else:
+    st.caption(
+        f"EPV {_epv_mt['epv']:.1f}: {_epv_mt['n_events']:,} eventos da classe menos "
+        f"frequente para {_epv_mt['n_predictors']:,} variáveis na entrada do modelo "
+        "(com one-hot, cada nível conta)."
+    )
+if (ss.get("model_config") or {}).get("balancing", "none") != "none":
+    warn_box(
+        "Balanceamento ativo: peso de classe e reamostragem distorcem a probabilidade. "
+        "Compare CITL, slope e O:E com um treino sem balanceamento antes de usar o "
+        "risco predito (CP5 e CP9 da ml-checkpoints)."
+    )
+
 if "curvas" in ss.get("active_sections", set()):
     st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
     st.markdown("**Curvas de desempenho**")
@@ -2920,6 +2993,56 @@ if "distribuicao" in ss.get("active_sections", set()):
     )
     fig_dist.update_layout(margin=dict(t=40, b=0))
     st.plotly_chart(fig_dist, use_container_width=True)
+
+if "decision_curve" in ss.get("active_sections", set()):
+    st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
+    st.markdown("**Decision Curve: utilidade clínica por limiar**")
+    st.caption(
+        "Benefício líquido = VP/n - FP/n x t/(1 - t), tratando quem tem p ≥ t. O modelo "
+        "só é útil onde supera a melhor entre tratar todos e não tratar ninguém, e por "
+        "uma margem mínima: ganho de terceira casa decimal não muda conduta. A margem é "
+        "decisão clínica, tomada antes de olhar a curva (CP8 da ml-checkpoints e item 13 "
+        "dos aprendizados do ai-lab-hub)."
+    )
+    _dca_margin = st.number_input(
+        "Margem mínima de ganho (benefício líquido absoluto)",
+        min_value=0.0, max_value=0.5, value=float(ss.get("dca_margin", 0.01)),
+        step=0.005, format="%.3f", key="dca_margin_in",
+        help="0,01 = um verdadeiro positivo líquido a cada 100 pacientes.",
+    )
+    ss["dca_margin"] = float(_dca_margin)
+    with _warnings_mt.catch_warnings():
+        _warnings_mt.simplefilter("ignore", _mt.MetricWarning)
+        _dca = _mt.decision_curve(_y_eval_mt, _p_eval_mt)
+    _dca_rg = _mt.net_benefit_ranges(_dca, margin=_dca_margin)
+    st.plotly_chart(ev.decision_curve_chart(_dca, _dca_rg), use_container_width=True)
+    st.markdown(
+        f"- **Faixa com ganho de pelo menos {_dca_margin:.3f}:** "
+        f"{_mt.format_ranges(_dca_rg['relevant_gain'])}\n"
+        f"- **Faixa com qualquer ganho (critério ingênuo):** "
+        f"{_mt.format_ranges(_dca_rg['any_gain'])}\n"
+        f"- **Maior ganho:** {_dca_rg['max_gain']:.4f} no limiar "
+        f"{_dca_rg['threshold_max_gain']:.0%}"
+    )
+    if not (_dca_rg["relevant_gain_contiguous"] and _dca_rg["any_gain_contiguous"]):
+        warn_box(
+            "A faixa tem buracos: reporte os trechos, não o mínimo e o máximo como "
+            "um intervalo só."
+        )
+    if _clin_mt["prevalence"] < _dca_margin:
+        info_box(
+            f"A prevalência ({_clin_mt['prevalence']:.2%}) é menor que a margem: o benefício "
+            "líquido nunca passa da prevalência, então nenhuma faixa atinge essa margem."
+        )
+    with st.expander("Tabela da decision curve"):
+        st.dataframe(
+            _dca.rename(columns={
+                "threshold": "Limiar", "net_benefit_model": "Modelo",
+                "net_benefit_all": "Tratar todos", "net_benefit_none": "Ninguém",
+                "best_trivial": "Melhor trivial", "gain": "Ganho",
+            }).round(4),
+            use_container_width=True, hide_index=True,
+        )
 
 if "shap_global" in ss.get("active_sections", set()):
     st.markdown('<hr class="ds-divider">', unsafe_allow_html=True)
