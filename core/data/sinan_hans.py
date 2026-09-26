@@ -106,20 +106,15 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def filter_closed_cases(df: pd.DataFrame) -> pd.DataFrame:
-    """Mantém os casos com tipo de saída registrado (TPALTA_N 1 a 9).
-
-    O filtro antigo aceitava só 1 a 6 e descartava o abandono (7) antes do alvo.
-    """
-    if "TPALTA_N" in df.columns:
-        closed = rotulo.codigo(df["TPALTA_N"]).isin(TPALTA_N_MAPA)
-        return df[closed].copy()
-    return df
-
-
 def drop_censored(df: pd.DataFrame, target_col: str = "abandono") -> pd.DataFrame:
-    """Tira da coorte do abandono a censura (TPALTA_N 2 a 6, 8 e 9) e o
-    código fora do dicionário, com a contagem em ``df.attrs``."""
+    """Tira da coorte do abandono a censura (TPALTA_N 2 a 6, 8 e 9) e o que
+    não tem código válido (sem tipo de saída, em branco, fora do dicionário),
+    com as duas contagens em ``df.attrs["exclusoes_rotulo"]`` e no log.
+
+    Não filtre os casos com saída registrada antes: o filtro tiraria o em
+    branco e o código fora do dicionário sem contá-los. O filtro antigo de
+    encerrados (1 a 6) ainda descartava o abandono (7).
+    """
     return rotulo.excluir_sem_rotulo(df, target_col, "TPALTA_N", TPALTA_CENSURA_ABANDONO)
 
 

@@ -18,7 +18,8 @@ class AbandonoHanseniase(OutcomeConfig):
             description=(
                 "Prediz o risco de abandono do tratamento de hanseníase (TPALTA_N = 7), "
                 "contra a cura (TPALTA_N = 1). Transferências (2 a 5 e 9), óbito (6) e "
-                "erro diagnóstico (8) são censura e saem da coorte. "
+                "erro diagnóstico (8) são censura; sem tipo de saída (em branco) fica sem "
+                "rótulo. Os dois grupos saem da coorte. "
                 "O tratamento padrão é 6 doses (PB) ou 12 doses (MB). "
                 "Features incluem forma clínica, grau de incapacidade ao diagnóstico, "
                 "modo de detecção, esquema terapêutico e características sociodemográficas. "
@@ -41,8 +42,8 @@ class AbandonoHanseniase(OutcomeConfig):
 
     def build_cohort(self, data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         df = hans_prep.preprocess(data["SINAN_HANS"])
-        df = hans_prep.filter_closed_cases(df)
-        # Censura (transferência, óbito, erro diagnóstico) sai em vez de virar 0
+        # Censura (transferência, óbito, erro diagnóstico) e caso sem tipo de
+        # saída válido saem em vez de virar 0, cada grupo com sua contagem
         df = hans_prep.drop_censored(df, self.target_col)
         return df
 

@@ -267,9 +267,19 @@ def test_hanseniase_tpalta_mapa_abandono():
             assert got == esperado, f"TPALTA_N {cod!r}: abandono {got} != {esperado}"
 
 
-def test_hanseniase_filtro_de_encerrados_mantem_o_abandono():
-    df = hans_prep.filter_closed_cases(hans_prep.preprocess(_hans_saida_raw(["1", "6", "7", "8", "9", "", "0"])))
-    assert df["TPALTA_N"].tolist() == ["1", "6", "7", "8", "9"]
+def test_hanseniase_tpalta_classes_cobrem_o_dicionario():
+    # cura, abandono e censura partem o dicionário sem sobra nem sobreposição
+    classes = [hans_prep.TPALTA_CURA, hans_prep.TPALTA_ABANDONO, hans_prep.TPALTA_CENSURA_ABANDONO]
+    assert set().union(*classes) == set(hans_prep.TPALTA_N_MAPA)
+    assert sum(len(c) for c in classes) == len(hans_prep.TPALTA_N_MAPA)
+
+
+def test_hanseniase_abandono_coorte_mantem_o_abandono_e_conta_o_resto():
+    oc = AbandonoHanseniase()
+    cohort = oc.build_cohort({"SINAN_HANS": _hans_saida_raw(["1", "6", "7", "8", "9", "", "0"])})
+    # o abandono (7) fica; em branco e "0" (fora do dicionário) saem contados
+    assert cohort["TPALTA_N"].tolist() == ["1", "7"]
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 3, "sem_codigo": 2, "mantidos": 2}
 
 
 def test_hanseniase_abandono_coorte_exclui_censura_e_conta(caplog):
@@ -278,9 +288,9 @@ def test_hanseniase_abandono_coorte_exclui_censura_e_conta(caplog):
     with caplog.at_level(logging.WARNING):
         cohort = oc.build_cohort({"SINAN_HANS": raw})
 
-    # 7 censurados (2 a 6, 8 e 9); o em branco sai no filtro de encerrados
-    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 7, "sem_codigo": 0, "mantidos": 4}
-    assert "7 casos censurados (TPALTA_N 2, 3, 4, 5, 6, 8, 9)" in caplog.text
+    # 7 censurados (2 a 6, 8 e 9); o em branco sai contado como sem código
+    assert cohort.attrs["exclusoes_rotulo"] == {"censura": 7, "sem_codigo": 1, "mantidos": 4}
+    assert "7 casos censurados (TPALTA_N 2, 3, 4, 5, 6, 8, 9) e 1 sem código válido" in caplog.text
     y = oc.get_target(oc.build_features(cohort))
     assert y.tolist() == [0, 1, 1, 0]
 
