@@ -136,7 +136,7 @@ Para forçar re-download: deletar o `.parquet` correspondente em `RAW_DIR`. `cac
 | SIM      | `core.data.sim`         | `preprocess(df)`   | Decodifica campo IDADE (prefixo)    |
 | SINASC   | `core.data.sinasc`      | `preprocess(df)`   | Deriva preterm, low_birth_weight   |
 | SINAN_TB | `core.data.sinan`       | `preprocess(df)`   | Decodifica NU_IDADE_N em `idade_anos` e deriva `abandono`, `cura` e `obito_tb` (NaN na censura); `filter_closed_cases` e `drop_censored` ficam à parte |
-| Outros   | `core.data.sinan_*`     | `preprocess(df)`   | Específico por doença               |
+| Outros   | `core.data.sinan_*`     | `preprocess(df)`   | Específico por doença; `sinan_hans`, `sinan_iexo` e `sinan_aids` derivam o alvo com NaN na censura e expõem `drop_censored` (helper em `core/data/rotulo.py`) |
 
 ---
 

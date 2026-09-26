@@ -71,6 +71,14 @@ class NomeClasse(OutcomeConfig):
         return cohort[self.target_col].fillna(0).astype(int)
 ```
 
+**Rótulo por código com censura (SINAN).** Quando o alvo vem de um campo de código em que parte dos valores não é nem positivo nem negativo (transferência, óbito por outra causa, não avaliado, ignorado), use `core.data.rotulo` em vez do `fillna(0)` do modelo acima, como fazem `abandono_tb`, `abandono_hanseniase`, `incapacidade_hanseniase`, `obito_aids` e `intoxicacao_grave`:
+
+- no preprocessador, `rotulo.codigo` normaliza o código e `rotulo.alvo_com_censura` dá 1 no positivo, 0 só no negativo declarado e NaN no resto;
+- em `build_cohort`, `rotulo.excluir_sem_rotulo` tira os NaN da coorte e conta censura e sem código em `df.attrs["exclusoes_rotulo"]`;
+- em `get_target`, `rotulo.exigir_rotulo` falha se sobrar NaN.
+
+Cada código vem do dicionário oficial do agravo, com a fonte citada no comentário do mapa, e ganha um caso em `tests/test_rotulos.py`.
+
 ---
 
 ## Passo 2: registrar em `core/outcomes/__init__.py`
