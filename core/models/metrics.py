@@ -666,27 +666,33 @@ def events_per_variable(y_true, n_predictors: int, min_epv: float = 10.0) -> dic
     n_events = min(n_pos, n - n_pos)
     k = int(n_predictors)
     epv = n_events / k
-    ok = epv >= min_epv
-    if n_events == 0:
-        _warn("EPV: só há uma classe no desfecho (ou nenhuma linha); N mínimo indefinido.")
-        n_min = NAN
-    else:
-        n_min = float(math.ceil(min_epv * k * n / n_events))
-        if not ok:
-            _warn(
-                f"EPV {epv:.1f} abaixo de {min_epv:g}: {n_events} eventos para {k} "
-                f"variáveis. Na prevalência atual, seriam precisos cerca de "
-                f"{int(n_min):,} registros, ou menos variáveis."
-            )
-    return {
+    n_min = float(math.ceil(min_epv * k * n / n_events)) if n_events else NAN
+    out = {
         "n": n,
         "n_events": n_events,
         "n_predictors": k,
         "epv": float(epv),
         "min_epv": float(min_epv),
         "n_min": n_min,
-        "ok": bool(ok),
+        "ok": bool(epv >= min_epv),
     }
+    msg = epv_message(out)
+    if msg:
+        _warn(msg)
+    return out
+
+
+def epv_message(epv: dict) -> str | None:
+    """Texto do aviso de EPV baixo, ou None quando o EPV atinge o mínimo."""
+    if epv["ok"]:
+        return None
+    if epv["n_events"] == 0:
+        return "EPV: só há uma classe no desfecho (ou nenhuma linha); N mínimo indefinido."
+    return (
+        f"EPV {epv['epv']:.1f} abaixo de {epv['min_epv']:g}: {epv['n_events']:,} "
+        f"eventos para {epv['n_predictors']:,} variáveis. Na prevalência atual, "
+        f"seriam precisos cerca de {int(epv['n_min']):,} registros, ou menos variáveis."
+    )
 
 
 # ── Resumo para a tela e o relatório ─────────────────────────────────────────

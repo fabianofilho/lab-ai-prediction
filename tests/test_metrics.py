@@ -307,3 +307,42 @@ def test_entrada_invalida_da_erro_claro():
         M.roc_auc([0, 1], [0.1, 1.2])
     with pytest.raises(ValueError, match="ausente"):
         M.roc_auc([0, 1], [0.1, np.nan])
+
+
+# ── Gráfico (só com plotly instalado) ────────────────────────────────────────
+
+
+def test_grafico_da_decision_curve_tem_as_tres_estrategias_e_a_faixa():
+    pytest.importorskip("plotly")
+    from core.models.evaluation import decision_curve_chart
+
+    y, p = _calibrado(n=3000, seed=10)
+    dc = M.decision_curve(y, p)
+    faixas = M.net_benefit_ranges(dc, margin=0.01)
+    fig = decision_curve_chart(dc, faixas)
+    assert [tr.name for tr in fig.data] == ["Não tratar ninguém", "Tratar todos", "Modelo"]
+    assert len(fig.layout.shapes) == len(faixas["relevant_gain"])
+    assert fig.layout.yaxis.range[1] > 0
+
+
+def test_mensagem_de_epv_so_quando_abaixo_do_minimo():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", M.MetricWarning)
+        baixo = M.events_per_variable(np.array([1] * 30 + [0] * 970), n_predictors=6)
+        alto = M.events_per_variable(np.array([1] * 300 + [0] * 700), n_predictors=6)
+    assert "2,000 registros" in M.epv_message(baixo)
+    assert M.epv_message(alto) is None
+
+
+def test_n_model_features_conta_os_niveis_do_one_hot():
+    from core.models.pipeline import build_pipeline, n_model_features
+
+    rng = np.random.default_rng(0)
+    X = pd.DataFrame({"a": rng.normal(size=200), "c": rng.integers(0, 4, 200).astype(float)})
+    y = pd.Series((rng.random(200) < 0.3).astype(int))
+    treatment = {"num_cols": ["a"], "cat_cols": ["c"], "num_default": "none",
+                 "cat_default": "ohe", "overrides": {}, "null_sentinels": []}
+    pipe = build_pipeline(X, "logreg", {}, treatment=treatment).fit(X, y)
+    assert n_model_features(pipe, X) == 1 + 4
+    # sem pipeline utilizável, cai no número de colunas
+    assert n_model_features(object(), X) == 2

@@ -740,6 +740,25 @@ def _compute_metrics(y_true, probs, preds) -> dict:
     }
 
 
+def n_model_features(pipe, X: pd.DataFrame) -> int:
+    """Número de colunas que chegam ao estimador depois do pré-processamento.
+
+    É o número de parâmetros candidatos do EPV: com one-hot, cada nível conta.
+    Passa umas poucas linhas de X pelos passos do pipeline treinado, pulando a
+    reamostragem, que não transforma. Se algo falhar, devolve o número de
+    colunas de X, que subestima o total quando há one-hot.
+    """
+    try:
+        Xt = X.head(min(len(X), 50))
+        for _, step in pipe.steps[:-1]:
+            if not hasattr(step, "transform"):
+                continue  # SMOTE e afins só atuam no fit
+            Xt = step.transform(Xt)
+        return int(Xt.shape[1])
+    except Exception:  # noqa: BLE001 (qualquer falha cai no número de colunas)
+        return int(X.shape[1])
+
+
 def _get_importances(pipe: Pipeline, feature_names: list[str]) -> dict | None:
     """Extract feature importances using pipeline's actual output feature names."""
     model = pipe[-1]
