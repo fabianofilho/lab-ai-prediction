@@ -55,10 +55,10 @@ class PermanenciaProlongada(OutcomeConfig):
 
         for col in ["SEXO", "RACA_COR", "CAR_INT"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         if "PROC_REA" in df.columns:
-            df["proc_rea_code"] = pd.Categorical(df["PROC_REA"].astype(str)).codes.astype(float)
+            df["proc_rea_code"] = eng.as_category(df["PROC_REA"])
 
         df = eng.clip_outliers(df, "VAL_TOT")
 

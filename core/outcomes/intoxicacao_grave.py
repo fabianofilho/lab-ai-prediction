@@ -55,7 +55,7 @@ class IntoxicacaoGrave(OutcomeConfig):
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "CS_GESTANT",
                     "AGENTE_TOX", "AGENTE_1", "CIRCUNSTAN", "VIA_1", "TPATENDE", "SIT_TRAB"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
         df = eng.clip_outliers(df, "idade_anos")
         return df
 

@@ -19,6 +19,9 @@ KEEP_COLS = [
     "RACACORMAE", "RACACOR",
     "ESTCIVMAE",
     "QTDFILVIVO", "QTDFILMORT",  # paridade (filhos vivos/mortos) — feature de cesárea
+    # história obstétrica: gestações e partos anteriores. Registrada no parto,
+    # mas descreve o que aconteceu antes da gestação atual, então não vaza.
+    "QTDGESTANT", "QTDPARTNOR", "QTDPARTCES",
     "CODANOMAL",         # congenital anomaly ICD-10
     "IDANOMAL",          # anomaly flag
     "TPAPRESENT",        # fetal presentation
@@ -31,6 +34,10 @@ KEEP_COLS = [
     "CNS_MAE", "CPF_MAE",
     "CNS",               # infant CNS
 ]
+
+
+QTD_COLS = ["QTDFILVIVO", "QTDFILMORT", "QTDGESTANT", "QTDPARTNOR", "QTDPARTCES"]
+QTD_IGNORADO = 99
 
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
@@ -46,6 +53,14 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["PESO", "APGAR1", "APGAR5", "IDADEMAE", "CONSULTAS"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Contagens obstétricas: no dicionário do SINASC, 99 é ignorado. Fica
+    # ausente aqui, antes de qualquer desfecho, para não virar 99 filhos (ou 20,
+    # depois de um clip).
+    for col in QTD_COLS:
+        if col in df.columns:
+            qtd = pd.to_numeric(df[col], errors="coerce")
+            df[col] = qtd.mask(qtd == QTD_IGNORADO)
 
     # Derived risk flags
     if "PESO" in df.columns:

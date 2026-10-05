@@ -54,7 +54,7 @@ class SifilisNaoCura(OutcomeConfig):
             df["idade_anos"] = pd.to_numeric(df["idade_anos"], errors="coerce")
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "CS_GESTANT", "CRITERIO", "DOENCA_TRA"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
         if "dias_notif_diag" in df.columns:
             df["dias_notif_diag"] = pd.to_numeric(df["dias_notif_diag"], errors="coerce")
             df = eng.clip_outliers(df, "dias_notif_diag")

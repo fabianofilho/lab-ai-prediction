@@ -66,16 +66,16 @@ class MortalidadeHospitalar(OutcomeConfig):
             df["age_group"] = eng.age_group(df["IDADE"])
 
         if "SEXO" in df.columns:
-            df["SEXO"] = pd.Categorical(df["SEXO"].astype(str)).codes.astype(float)
+            df["SEXO"] = eng.as_category(df["SEXO"])
 
         if "RACA_COR" in df.columns:
-            df["RACA_COR"] = pd.Categorical(df["RACA_COR"].astype(str)).codes.astype(float)
+            df["RACA_COR"] = eng.as_category(df["RACA_COR"])
 
         if "CAR_INT" in df.columns:
-            df["CAR_INT_code"] = pd.Categorical(df["CAR_INT"].astype(str)).codes.astype(float)
+            df["CAR_INT_code"] = eng.as_category(df["CAR_INT"])
 
         if "PROC_REA" in df.columns:
-            df["proc_rea_code"] = pd.Categorical(df["PROC_REA"].astype(str)).codes.astype(float)
+            df["proc_rea_code"] = eng.as_category(df["PROC_REA"])
 
         df = eng.clip_outliers(df, "length_of_stay_days")
         df = eng.clip_outliers(df, "VAL_TOT")

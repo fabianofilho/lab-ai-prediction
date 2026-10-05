@@ -79,15 +79,15 @@ class ReadmissaoHospitalar30d(OutcomeConfig):
 
         # Procedure code
         if "PROC_REA" in df.columns:
-            df["proc_rea_code"] = pd.Categorical(df["PROC_REA"].astype(str)).codes.astype(float)
+            df["proc_rea_code"] = eng.as_category(df["PROC_REA"])
 
         # Sex binary
         if "SEXO" in df.columns:
-            df["SEXO"] = pd.Categorical(df["SEXO"].astype(str)).codes.astype(float)
+            df["SEXO"] = eng.as_category(df["SEXO"])
 
         # Race
         if "RACA_COR" in df.columns:
-            df["RACA_COR"] = pd.Categorical(df["RACA_COR"].astype(str)).codes.astype(float)
+            df["RACA_COR"] = eng.as_category(df["RACA_COR"])
 
         # Clip outliers on length of stay
         df = eng.clip_outliers(df, "length_of_stay_days")

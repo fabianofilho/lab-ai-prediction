@@ -54,7 +54,7 @@ class ApgarBaixo(OutcomeConfig):
         for col in ["GESTACAO", "PARTO", "GRAVIDEZ", "TPAPRESENT", "SEXO",
                     "ESCMAE", "RACACORMAE", "ESTCIVMAE", "STTRABPART", "STCESPARTO"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         for col in ["PESO", "CONSULTAS"]:
             if col in df.columns:

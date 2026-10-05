@@ -225,6 +225,11 @@ def _safe_combine_sampler(random_state: int = 42):
         return _safe_over_sampler(random_state)
 
 
+def _sentinela_texto(v) -> str:
+    """Forma textual de um código de ignorado: 9, 9.0, " 9" e "9.0" viram "9"."""
+    return str(v).strip().removesuffix(".0")
+
+
 class SentinelReplacer(BaseEstimator, TransformerMixin):
     """Replace DATASUS sentinel values (e.g. 9, 99 = 'Ignorado') with NaN.
 
@@ -245,11 +250,34 @@ class SentinelReplacer(BaseEstimator, TransformerMixin):
             X = X.copy()
             for v in self.sentinels:
                 X = X.replace(v, np.nan)
+            # No SINAN e nas categóricas o ignorado chega como texto ("9",
+            # " 99", "9.0"), e a troca acima, que compara com número, não o
+            # alcança. Aqui a célula inteira é comparada depois de normalizada,
+            # nunca uma parte dela: um procedimento "0801010012" não vira
+            # ausente por conter o dígito 9.
+            textos = {_sentinela_texto(v) for v in self.sentinels}
+            for col in X.columns:
+                if pd.api.types.is_numeric_dtype(X[col]):
+                    continue
+                serie = X[col].astype(object)
+                bate = serie.map(
+                    lambda v: isinstance(v, str) and _sentinela_texto(v) in textos
+                )
+                X[col] = serie.where(~bate.astype(bool), np.nan)
         else:
             X = X.astype(float)
             for v in self.sentinels:
                 X[X == v] = np.nan
         return X
+
+
+# Teto de colunas do one-hot por variável. As categorias além desse número,
+# as mais raras, viram uma coluna só. Sem o teto, uma variável como o
+# procedimento realizado do SIH (mais de mil códigos) geraria uma coluna por
+# código numa matriz densa: na mortalidade hospitalar do ES, com 288 mil
+# internações, seriam vários GB. Quem quiser todos os níveis escolhe target
+# encoding ou ordinal na tela.
+OHE_MAX_CATEGORIAS = 50
 
 
 def _build_preprocessor(
@@ -333,7 +361,9 @@ def _build_preprocessor(
         else:  # ohe (default)
             enc = Pipeline([
                 ("impute", SimpleImputer(strategy="most_frequent")),
-                ("encode", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+                ("encode", OneHotEncoder(
+                    handle_unknown="ignore", sparse_output=False,
+                    max_categories=OHE_MAX_CATEGORIAS)),
             ])
             transformers.append((f"cat_{t}", enc, cols))
 

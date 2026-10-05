@@ -34,6 +34,9 @@ class Prematuridade(OutcomeConfig):
                 "IDADEMAE", "ESCMAE", "RACACORMAE", "ESTCIVMAE",
                 "SEXO", "TPAPRESENT", "STTRABPART", "STCESPARTO",
                 "IDANOMAL", "age_group_mae", "UF_SIGLA",
+                # história obstétrica, que faltava na lista: o benchmark de
+                # pré-processamento mediu ganho de AUROC ao acrescentá-la (LAB-162)
+                "QTDGESTANT", "QTDPARTNOR", "QTDPARTCES", "QTDFILVIVO", "QTDFILMORT",
             ],
             target_col="prematuro",
         )
@@ -57,7 +60,7 @@ class Prematuridade(OutcomeConfig):
                     "ESCMAE", "RACACORMAE", "ESTCIVMAE", "STTRABPART", "STCESPARTO",
                     "UF_SIGLA"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         if "CONSULTAS" in df.columns:
             df["CONSULTAS"] = pd.to_numeric(df["CONSULTAS"], errors="coerce")
