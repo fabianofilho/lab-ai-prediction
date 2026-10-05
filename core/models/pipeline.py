@@ -38,6 +38,14 @@ ALGORITHMS: dict[str, str] = {
 BOOSTING_ALGORITHMS: set[str] = {"lgbm", "xgb", "catboost"}
 NEURAL_ALGORITHMS: set[str] = {"mlp"}
 
+# Algoritmos que dependem da escala das variáveis numéricas. Sem tratamento
+# definido (BenchLab, calibração), eles recebem Z-score nas numéricas; com
+# tratamento escolhido na tela, vale a escolha do usuário, inclusive "nenhuma".
+# Não existe mais escalonador escondido depois do pré-processamento: ele
+# escalonava também as colunas one-hot e escalonava de novo quem tinha
+# escolhido robust ou binning.
+SCALE_SENSITIVE: frozenset[str] = frozenset({"logreg", "mlp"})
+
 # TabPFN: always listed, but only usable if torch+tabpfn installed
 TABPFN_AVAILABLE: bool = False
 try:
@@ -291,7 +299,8 @@ def _build_preprocessor(
     if treatment is None:
         num_cols = X.select_dtypes(include="number").columns.tolist()
         cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
-        num_default, cat_default, overrides = "none", "ohe", {}
+        num_default = "standard" if algorithm in SCALE_SENSITIVE else "none"
+        cat_default, overrides = "ohe", {}
     else:
         # Use explicit cols from config (respects type overrides made by user)
         num_cols = treatment.get("num_cols") or X.select_dtypes(include="number").columns.tolist()
@@ -404,11 +413,6 @@ def build_pipeline(
     if sentinels:
         steps.append(("sentinel", SentinelReplacer(sentinels)))
     steps.append(("prep", preprocessor))
-
-    # Add StandardScaler for logreg / MLP when numerics aren't already scaled
-    _num_scaled = treatment is not None and treatment.get("num_default") in ("standard", "minmax")
-    if algorithm in ("logreg", "mlp") and not _num_scaled:
-        steps.append(("scaler", StandardScaler()))
 
     # Resolve effective resampling
     do_smote_over  = balancing == "smote_over" or use_smote
@@ -842,7 +846,7 @@ def _even_indices(n: int, k: int) -> list[int]:
 def _preprocess_fit_transform(X_tr, X_val, algorithm: str, treatment: dict | None):
     """Ajusta só o pré-processamento no treino e devolve arrays densos (tr, val).
 
-    Espelha o build_pipeline (sentinel + prep [+ scaler p/ logreg/mlp]) mas para
+    Espelha o build_pipeline (sentinel + prep) mas para
     antes do modelo, para que um booster/MLP possa ser treinado com eval_set.
     """
     sentinels = list((treatment or {}).get("null_sentinels", []))
@@ -850,9 +854,6 @@ def _preprocess_fit_transform(X_tr, X_val, algorithm: str, treatment: dict | Non
     if sentinels:
         steps.append(("sentinel", SentinelReplacer(sentinels)))
     steps.append(("prep", _build_preprocessor(X_tr, treatment, algorithm)))
-    _num_scaled = treatment is not None and treatment.get("num_default") in ("standard", "minmax")
-    if algorithm in ("logreg", "mlp") and not _num_scaled:
-        steps.append(("scaler", StandardScaler()))
     pre = Pipeline(steps)
     Xt_tr = pre.fit_transform(X_tr)
     Xt_val = pre.transform(X_val)

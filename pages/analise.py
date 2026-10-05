@@ -1640,6 +1640,17 @@ if not ss.get("model_config"):
         st.stop()
     algos = [ALGORITHMS[l] for l in algo_labels]
 
+    # A escala é a escolhida acima, sem escalonador escondido. Logística e MLP
+    # dependem dela, então quem deixou "Nenhuma" fica sabendo antes de treinar.
+    from core.models.pipeline import SCALE_SENSITIVE as _SCALE_SENSITIVE
+    _sem_escala = [l for l in algo_labels if ALGORITHMS[l] in _SCALE_SENSITIVE]
+    if _sem_escala and _num_default_key == "none":
+        st.warning(
+            f"**{' e '.join(_sem_escala)}** vão treinar com as variáveis numéricas sem escala, "
+            "porque a escala padrão está em **Nenhuma**. Esses modelos dependem da escala: "
+            "escolha **Padronização Z-score** em Variáveis Numéricas, acima, se quiser escalonar."
+        )
+
     # Aviso XGBoost: lento sem GPU
     if "xgb" in algos:
         st.warning(
