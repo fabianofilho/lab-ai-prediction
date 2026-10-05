@@ -59,7 +59,7 @@ class AbandonoTB(OutcomeConfig):
                     "BACILOSC_E", "CULTURA_ES", "AGRAVAIDS",
                     "TRATAMENTO", "RAIOX_TORA"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         # Binary flags already created in preprocessor (dot, hiv_pos, abandono)
         return df

@@ -33,6 +33,9 @@ class BaixoPesoNascer(OutcomeConfig):
                 "IDADEMAE", "ESCMAE", "RACACORMAE", "ESTCIVMAE",
                 "SEXO", "TPAPRESENT", "STTRABPART", "STCESPARTO",
                 "preterm", "age_group_mae",
+                # história obstétrica, a mesma de prematuridade (LAB-162); aqui o
+                # ganho ainda não foi medido
+                "QTDGESTANT", "QTDPARTNOR", "QTDPARTCES", "QTDFILVIVO", "QTDFILMORT",
             ],
             target_col="baixo_peso",
         )
@@ -55,7 +58,7 @@ class BaixoPesoNascer(OutcomeConfig):
         for col in ["GESTACAO", "PARTO", "GRAVIDEZ", "TPAPRESENT", "SEXO",
                     "ESCMAE", "RACACORMAE", "ESTCIVMAE", "STTRABPART", "STCESPARTO"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         if "CONSULTAS" in df.columns:
             df["CONSULTAS"] = pd.to_numeric(df["CONSULTAS"], errors="coerce")

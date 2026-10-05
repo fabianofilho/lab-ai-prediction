@@ -49,7 +49,7 @@ class ChikungunyaHospitalizado(OutcomeConfig):
             df["idade_anos"] = pd.to_numeric(df["idade_anos"], errors="coerce")
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "CS_GESTANT"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
         df = eng.clip_outliers(df, "idade_anos")
         return df
 

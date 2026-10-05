@@ -69,7 +69,7 @@ class Cesarea(OutcomeConfig):
         for col in ["GESTACAO", "GRAVIDEZ", "TPAPRESENT", "SEXO",
                     "ESCMAE", "RACACORMAE", "ESTCIVMAE", "STTRABPART"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         return df
 

@@ -86,7 +86,7 @@ class IncapacidadeHanseniase(OutcomeConfig):
                     "FORMACLINI", "CLASSOPERA", "MODOENTR",
                     "MODODETECT", "BACILOSCOP", "ESQ_INI_N"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         if "dias_notif_diag" in df.columns:
             df["dias_notif_diag"] = pd.to_numeric(df["dias_notif_diag"], errors="coerce")

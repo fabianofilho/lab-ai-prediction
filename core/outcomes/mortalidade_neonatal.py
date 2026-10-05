@@ -66,7 +66,7 @@ class MortalidadeNeonatal(OutcomeConfig):
         for col in ["GESTACAO", "PARTO", "GRAVIDEZ", "TPAPRESENT", "SEXO",
                     "ESCMAE", "RACACORMAE", "ESTCIVMAE"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         # Anomaly flag
         if "IDANOMAL" in df.columns:

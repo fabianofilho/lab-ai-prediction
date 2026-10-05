@@ -52,7 +52,7 @@ class ViolenciaAutoprovocada(OutcomeConfig):
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N",
                     "ORIENT_SEX", "IDENT_GEN", "CS_GESTANT", "SIT_CONJUG", "CICL_VID"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
         df = eng.clip_outliers(df, "idade_anos")
         return df
 

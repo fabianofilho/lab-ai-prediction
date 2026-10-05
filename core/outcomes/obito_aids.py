@@ -54,7 +54,7 @@ class ObitoAIDS(OutcomeConfig):
             df["idade_anos"] = pd.to_numeric(df["idade_anos"], errors="coerce")
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "CS_GESTANT", "CRITERIO", "DEF_DIAGNO"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
         if "n_doencas_aids" in df.columns:
             df["n_doencas_aids"] = pd.to_numeric(df["n_doencas_aids"], errors="coerce")
         df = eng.clip_outliers(df, "idade_anos")

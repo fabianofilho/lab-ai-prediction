@@ -66,7 +66,7 @@ class AnomaliaCongenita(OutcomeConfig):
         for col in ["GESTACAO", "GRAVIDEZ", "PARTO", "SEXO", "TPAPRESENT",
                     "ESCMAE", "RACACORMAE", "RACACOR", "ESTCIVMAE"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         df = eng.clip_outliers(df, "PESO")
 

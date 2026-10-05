@@ -43,6 +43,12 @@ class CohortBuilder:
             ]
 
         X = cohort[feature_cols].copy()
+        # Atributo constante na coorte não informa nada a nenhum modelo e só
+        # ocupa espaço. O caso típico é UF_SIGLA numa coorte de um estado só;
+        # numa coorte de vários estados ela varia e fica.
+        constantes = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
+        if constantes and len(constantes) < len(X.columns):
+            X = X.drop(columns=constantes)
         return X, y
 
     def split(

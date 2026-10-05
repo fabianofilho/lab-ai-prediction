@@ -58,7 +58,7 @@ class AbandonoHanseniase(OutcomeConfig):
                     "FORMACLINI", "MODOENTR", "MODODETECT",
                     "BACILOSCOP", "ESQ_INI_N"]:
             if col in df.columns:
-                df[col] = pd.Categorical(df[col].astype(str)).codes.astype(float)
+                df[col] = eng.as_category(df[col])
 
         for col in ["grau_incapacidade", "DOSE_RECEB"]:
             if col in df.columns:
