@@ -360,9 +360,9 @@ _SINAN_TB: dict[str, dict] = {
     },
     "hiv_pos": {
         "label": "Teste de HIV",
-        "desc": "Indica se o paciente realizou o teste HIV e seu resultado. Derivado de HIV.",
-        "type": "Derivada",
-        "values": {"0": "Negativo/Não realizado", "1": "Positivo"},
+        "desc": "Resultado do teste de HIV, derivado de HIV em três estados. Sem resultado (em andamento, não realizado ou em branco) é desconhecido, não negativo.",
+        "type": "Categórica",
+        "values": {"positivo": "Positivo (1)", "negativo": "Negativo (2)", "desconhecido": "Em andamento (3), não realizado (4) ou em branco"},
     },
     "AGRAVAIDS": {
         "label": "Coinfecção AIDS",

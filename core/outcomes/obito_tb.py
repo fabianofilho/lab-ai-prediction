@@ -57,7 +57,7 @@ class ObitoTB(OutcomeConfig):
             df["age_group"] = eng.age_group(df["idade_anos"])
 
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "FORMA",
-                    "BACILOSC_E", "CULTURA_ES", "AGRAVAIDS",
+                    "BACILOSC_E", "CULTURA_ES", "AGRAVAIDS", "hiv_pos",
                     "TRATAMENTO", "RAIOX_TORA"]:
             if col in df.columns:
                 df[col] = eng.as_category(df[col])

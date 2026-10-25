@@ -160,3 +160,23 @@ def test_uf_que_varia_continua():
         return
     X, _ = CohortBuilder(oc).get_Xy(cohort)
     assert "UF_SIGLA" in X.columns
+
+
+# ── HIV sem resultado não vira negativo (LAB-218) ─────────────────────────────
+
+def test_hiv_tres_estados():
+    from core.data import sinan
+
+    raw = pd.DataFrame({"HIV": ["1", "2", "3", "4", None, " 2", "1.0", "9"]})
+    hiv = sinan.preprocess(raw)["hiv_pos"].tolist()
+    assert hiv == ["positivo", "negativo", "desconhecido", "desconhecido", "desconhecido",
+                   "negativo", "positivo", "desconhecido"]
+
+
+def test_tb_build_features_hiv_categorico():
+    for chave in ("abandono_tb", "obito_tb"):
+        oc = OUTCOMES[chave]
+        raw = _tb_raw().assign(HIV=["1", "2", "4", None, "3", "2"], SITUA_ENCE=["1", "2", "1", "3", "1", "9"])
+        df = oc.build_features(oc.build_cohort({"SINAN_TB": raw}))
+        assert not pd.api.types.is_numeric_dtype(df["hiv_pos"]), f"{chave}: hiv_pos virou número"
+        assert "desconhecido" in set(df["hiv_pos"].dropna())
