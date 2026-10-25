@@ -78,6 +78,10 @@ SITUA_CENSURA_ABANDONO = SITUA_CENSURA | SITUA_OBITO
 SITUA_NEGATIVO_ABANDONO = SITUA_CURA | SITUA_FALENCIA
 SITUA_NEGATIVO_OBITO = SITUA_CURA | SITUA_FALENCIA
 
+# Campo HIV: 1 positivo, 2 negativo, 3 em andamento, 4 não realizado.
+HIV_POSITIVO = {"1"}
+HIV_NEGATIVO = {"2"}
+
 # No óbito, o abandono (2 e 10) também é censura, pela mesma decisão do lab:
 # quem abandonou saiu de vista antes do encerramento, e contá-lo como 0
 # afirmaria que ele não morreu.
@@ -114,9 +118,15 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     if "TRAT_SUPER" in df.columns:
         df["dot"] = (df["TRAT_SUPER"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True) == "1").astype(int)
 
-    # HIV positive flag
+    # HIV em três estados: positivo, negativo e desconhecido (em andamento, não
+    # realizado, em branco ou fora do dicionário). Sem resultado não é
+    # negativo; como categoria, a ausência chega ao modelo como informação em
+    # vez de ser imputada pela mediana, que é 0 (LAB-218).
     if "HIV" in df.columns:
-        df["hiv_pos"] = (df["HIV"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True) == "1").astype(int)
+        cod = rotulo.codigo(df["HIV"])
+        df["hiv_pos"] = pd.Series("desconhecido", index=df.index, dtype=object)
+        df.loc[cod.isin(HIV_POSITIVO), "hiv_pos"] = "positivo"
+        df.loc[cod.isin(HIV_NEGATIVO), "hiv_pos"] = "negativo"
 
     # Identifiers
     for col in ["NM_PACIENT", "NM_MAE_PAC", "CNS_1"]:

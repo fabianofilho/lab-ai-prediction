@@ -56,12 +56,12 @@ class AbandonoTB(OutcomeConfig):
 
         # Categoricals
         for col in ["CS_SEXO", "CS_RACA", "CS_ESCOL_N", "FORMA",
-                    "BACILOSC_E", "CULTURA_ES", "AGRAVAIDS",
+                    "BACILOSC_E", "CULTURA_ES", "AGRAVAIDS", "hiv_pos",
                     "TRATAMENTO", "RAIOX_TORA"]:
             if col in df.columns:
                 df[col] = eng.as_category(df[col])
 
-        # Binary flags already created in preprocessor (dot, hiv_pos, abandono)
+        # Binary flags already created in preprocessor (dot, abandono)
         return df
 
     def get_target(self, cohort: pd.DataFrame) -> pd.Series:
